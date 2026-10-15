@@ -14,7 +14,13 @@ import path from 'path';
 
 export async function POST(request) {
   const resolution = BaileysGatewayResolver.resolve(request);
-  const { url: gatewayUrl, isVercel, isLocalhost, isInvalidVercelLocalhost } = resolution;
+  const { url: gatewayUrl, isVercel, isInvalidVercelLocalhost } = resolution;
+
+  let force = false;
+  try {
+    const urlObj = new URL(request.url);
+    force = urlObj.searchParams.get('force') === 'true';
+  } catch (_) {}
 
   // 1. Caso especial: Despliegue en Vercel con URL en localhost
   if (isInvalidVercelLocalhost) {
@@ -32,9 +38,10 @@ export async function POST(request) {
 
   // 2. Intentamos invocar el endpoint de conexión en el Gateway
   try {
-    const res = await fetch(`${gatewayUrl}/api/whatsapp/connect`, {
+    const targetUrl = `${gatewayUrl}/api/whatsapp/connect${force ? '?force=true' : ''}`;
+    const res = await fetch(targetUrl, {
       method: 'POST',
-      signal: AbortSignal.timeout(6000)
+      signal: AbortSignal.timeout(7000)
     });
 
     if (res.ok) {
@@ -75,9 +82,9 @@ export async function POST(request) {
 
     // Volvemos a solicitar la conexión
     try {
-      const retryRes = await fetch(`${gatewayUrl}/api/whatsapp/connect`, {
+      const retryRes = await fetch(`${gatewayUrl}/api/whatsapp/connect${force ? '?force=true' : ''}`, {
         method: 'POST',
-        signal: AbortSignal.timeout(4000)
+        signal: AbortSignal.timeout(5000)
       });
       if (retryRes.ok) {
         return NextResponse.json({

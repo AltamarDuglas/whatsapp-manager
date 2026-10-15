@@ -1,8 +1,11 @@
 /**
  * ============================================================================
  * ARCHIVO: scripts/baileys-gateway.cjs
- * DESCRIPCIÓN: Microservicio Gateway de Baileys para conexión WhatsApp por QR.
- * PUERTO: 3001 (configurable con variable de entorno PORT).
+ * DESCRIPCIÓN: Microservicio Gateway ultra-robusto y de alta velocidad para Baileys.
+ *              - Generación de código QR instantánea sin bloqueo de red.
+ *              - Auto-recuperación automática ante timeouts (código 408) y desconexiones.
+ *              - Prevención de terminación del proceso (inmune a caídas).
+ * PUERTO: 3001 (configurable mediante variable PORT).
  * PRINCIPIO SOLID: Single Responsibility Principle (SRP)
  * ============================================================================
  */
@@ -15,26 +18,32 @@ const pino = require('pino');
 const {
   default: makeWASocket,
   useMultiFileAuthState,
-  DisconnectReason,
-  fetchLatestBaileysVersion
+  DisconnectReason
 } = require('@whiskeysockets/baileys');
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
 const SESSIONS_DIR = path.resolve(__dirname, '../data/baileys_auth');
 
+// Versión estable de Baileys en caché para evitar demoras por peticiones HTTP externas
+const DEFAULT_VERSION = [2, 3000, 1015901307];
+
 let sock = null;
 let isConnected = false;
 let currentQrCode = null;
 let currentQrDataUrl = null;
+let currentQrTimestamp = 0;
 let connectedUser = null;
 let isInitializing = false;
 let isManualDisconnect = false;
+let reconnectTimer = null;
 const qrListeners = [];
 
+// Aseguramos que el directorio de sesiones exista
 if (!fs.existsSync(SESSIONS_DIR)) {
   fs.mkdirSync(SESSIONS_DIR, { recursive: true });
 }
 
+// Limpieza de listeners de QR pendientes
 function notifyQrListeners(qrDataUrl) {
   while (qrListeners.length > 0) {
     const callback = qrListeners.shift();
@@ -43,64 +52,86 @@ function notifyQrListeners(qrDataUrl) {
 }
 
 /**
- * Inicializa Baileys y retorna una promesa que resuelve cuando el QR está listo
- * o cuando se conecta exitosamente.
+ * Limpia los archivos temporales de sesión cuando una vinculación expira (código 408)
+ * para evitar que Baileys intente reanudar credenciales inválidas.
  */
-function initBaileys() {
-  if (sock && isConnected) {
-    console.log('[BaileysGateway] La sesión ya está conectada y activa.');
+function cleanEphemeralAuth() {
+  if (isConnected) return; // Nunca borrar si está conectado
+  try {
+    if (fs.existsSync(SESSIONS_DIR)) {
+      const files = fs.readdirSync(SESSIONS_DIR);
+      for (const file of files) {
+        // Borramos claves temporales efímeras de pre-autenticación
+        if (file.startsWith('pre-key-') || file.startsWith('session-') || file === 'creds.json') {
+          try { fs.unlinkSync(path.join(SESSIONS_DIR, file)); } catch (_) {}
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[BaileysGateway] Advertencia limpiando auth efímero:', e.message);
+  }
+}
+
+/**
+ * Inicializa Baileys y retorna una promesa que resuelve en cuanto el QR está disponible.
+ * @param {boolean} [forceNew=false] Si es true, reinicia el socket aunque exista uno.
+ */
+function initBaileys(forceNew = false) {
+  if (sock && isConnected && !forceNew) {
     return Promise.resolve({ isConnected: true, hasQr: false, user: connectedUser });
   }
 
-  // Si ya tenemos un QR generado recientemente, lo retornamos inmediatamente
-  if (currentQrDataUrl) {
+  // Si ya tenemos un QR generado en los últimos 20 segundos y no es forzado, lo devolvemos
+  const qrAgeMs = Date.now() - currentQrTimestamp;
+  if (!forceNew && currentQrDataUrl && qrAgeMs < 20000) {
     return Promise.resolve({ isConnected: false, hasQr: true, qrDataUrl: currentQrDataUrl });
   }
 
   const qrPromise = new Promise((resolve) => {
     const timeout = setTimeout(() => {
-      resolve({ isConnected: false, hasQr: Boolean(currentQrDataUrl), qrDataUrl: currentQrDataUrl });
-    }, 12000);
+      resolve({
+        isConnected,
+        hasQr: Boolean(currentQrDataUrl),
+        qrDataUrl: currentQrDataUrl
+      });
+    }, 8000);
 
     qrListeners.push((dataUrl) => {
       clearTimeout(timeout);
-      resolve({ isConnected: false, hasQr: true, qrDataUrl: dataUrl });
+      resolve({ isConnected: false, hasQr: Boolean(dataUrl), qrDataUrl: dataUrl });
     });
   });
 
-  if (isInitializing) {
+  if (isInitializing && !forceNew) {
     return qrPromise;
   }
 
   isInitializing = true;
   isManualDisconnect = false;
-  console.log('[BaileysGateway] Iniciando conexión con WhatsApp Web...');
 
   (async () => {
     try {
-      const { state, saveCreds } = await useMultiFileAuthState(SESSIONS_DIR);
-      let version = [2, 3000, 1015901307];
-      try {
-        const v = await fetchLatestBaileysVersion();
-        version = v.version;
-      } catch (e) {
-        console.warn('[BaileysGateway] Usando versión Baileys de respaldo.');
-      }
-
       if (sock) {
-        try { sock.end(undefined); } catch (_) {}
+        try {
+          sock.ev.removeAllListeners('connection.update');
+          sock.ev.removeAllListeners('creds.update');
+          sock.end(undefined);
+        } catch (_) {}
         sock = null;
       }
 
+      const { state, saveCreds } = await useMultiFileAuthState(SESSIONS_DIR);
+
       sock = makeWASocket({
-        version,
+        version: DEFAULT_VERSION,
         logger: pino({ level: 'silent' }),
-        printQRInTerminal: true,
+        printQRInTerminal: false, // El frontend se encarga del render visual limpio
         auth: state,
         browser: ['Secretaría WhatsApp', 'Desktop', '1.0.0'],
         syncFullHistory: false,
         connectTimeoutMs: 60000,
-        defaultQueryTimeoutMs: 60000
+        defaultQueryTimeoutMs: 60000,
+        keepAliveIntervalMs: 25000
       });
 
       sock.ev.on('creds.update', saveCreds);
@@ -108,21 +139,25 @@ function initBaileys() {
       sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
+        // Se generó un nuevo código QR
         if (qr) {
           currentQrCode = qr;
+          currentQrTimestamp = Date.now();
           try {
             currentQrDataUrl = await QRCode.toDataURL(qr, {
               margin: 2,
-              scale: 8,
+              scale: 7,
               color: { dark: '#111b21', light: '#ffffff' }
             });
-            console.log('[BaileysGateway] ✓ Código QR generado exitosamente.');
+            isInitializing = false;
+            console.log('[BaileysGateway] Código QR generado y listo para escanear.');
             notifyQrListeners(currentQrDataUrl);
           } catch (err) {
-            console.error('[BaileysGateway] Error convirtiendo QR a imagen:', err);
+            console.error('[BaileysGateway] Error convirtiendo QR a DataURL:', err.message);
           }
         }
 
+        // WhatsApp conectado exitosamente
         if (connection === 'open') {
           isConnected = true;
           currentQrCode = null;
@@ -141,21 +176,29 @@ function initBaileys() {
           notifyQrListeners(null);
         }
 
+        // Conexión cerrada
         if (connection === 'close') {
           isConnected = false;
           isInitializing = false;
 
           const statusCode = lastDisconnect?.error?.output?.statusCode;
-          const shouldReconnect = statusCode !== DisconnectReason.loggedOut && !isManualDisconnect;
+          const isTimedOut = statusCode === DisconnectReason.timedOut || statusCode === 408;
+          const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+          const shouldReconnect = !isLoggedOut && !isManualDisconnect;
 
-          console.log(`[BaileysGateway] Conexión cerrada (Código: ${statusCode}). ¿Reconectar?: ${shouldReconnect}`);
+          console.log(`[BaileysGateway] Conexión cerrada (Código: ${statusCode || 'desconocido'}). Reconectar: ${shouldReconnect}`);
+
+          if (isTimedOut) {
+            // El QR anterior expiró sin escanear: limpiamos auth efímero y regeneramos de inmediato
+            cleanEphemeralAuth();
+          }
 
           if (shouldReconnect) {
-            // Reconexión automática sin borrar el QR previo hasta que llegue el nuevo
-            setTimeout(() => {
-              isInitializing = false;
-              initBaileys();
-            }, 3000);
+            if (reconnectTimer) clearTimeout(reconnectTimer);
+            reconnectTimer = setTimeout(() => {
+              console.log('[BaileysGateway] Reconectando y solicitando nuevo código QR...');
+              initBaileys(true);
+            }, 1200);
           } else {
             currentQrCode = null;
             currentQrDataUrl = null;
@@ -165,6 +208,7 @@ function initBaileys() {
         }
       });
 
+      // Manejo de mensajes entrantes
       sock.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type === 'notify') {
           for (const msg of messages) {
@@ -178,7 +222,7 @@ function initBaileys() {
       });
 
     } catch (error) {
-      console.error('[BaileysGateway] Error inicializando Baileys:', error);
+      console.error('[BaileysGateway] Error durante arranque de Baileys:', error.message);
       isInitializing = false;
       notifyQrListeners(null);
     }
@@ -188,7 +232,7 @@ function initBaileys() {
 }
 
 /**
- * Desconecta la sesión y limpia las credenciales.
+ * Desconecta la sesión y resetea las credenciales en disco.
  */
 async function disconnectBaileys() {
   isManualDisconnect = true;
@@ -199,13 +243,15 @@ async function disconnectBaileys() {
 
   if (sock) {
     try {
+      sock.ev.removeAllListeners('connection.update');
+      sock.ev.removeAllListeners('creds.update');
       await sock.logout();
-    } catch (e) {
-      try { sock.end(undefined); } catch (_) {}
-    }
+      sock.end(undefined);
+    } catch (_) {}
     sock = null;
   }
 
+  // Eliminar archivos de sesión
   try {
     if (fs.existsSync(SESSIONS_DIR)) {
       const files = fs.readdirSync(SESSIONS_DIR);
@@ -214,19 +260,20 @@ async function disconnectBaileys() {
       }
     }
   } catch (err) {
-    console.warn('[BaileysGateway] Advertencia limpiando archivos de sesión:', err.message);
+    console.warn('[BaileysGateway] Error limpiando credenciales:', err.message);
   }
 
-  console.log('[BaileysGateway] Sesión desconectada y credenciales reseteadas.');
+  console.log('[BaileysGateway] Sesión desconectada y credenciales limpiadas.');
 }
 
 /**
- * Servidor HTTP
+ * Servidor HTTP REST para comunicar con Next.js (Local o Vercel)
  */
 const server = http.createServer(async (req, res) => {
+  // Configuración de cabeceras CORS permisivas para permitir llamadas remotas
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Cache-Control');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Cache-Control, x-baileys-gateway-url');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
 
   if (req.method === 'OPTIONS') {
@@ -247,6 +294,7 @@ const server = http.createServer(async (req, res) => {
         isConnected,
         hasQr: Boolean(currentQrDataUrl),
         qrDataUrl: currentQrDataUrl,
+        qrAgeSeconds: currentQrTimestamp ? Math.round((Date.now() - currentQrTimestamp) / 1000) : 0,
         user: connectedUser,
         status: isConnected
           ? 'connected'
@@ -262,17 +310,17 @@ const server = http.createServer(async (req, res) => {
 
   // Endpoint: POST /api/whatsapp/connect
   if (req.method === 'POST' && url.pathname === '/api/whatsapp/connect') {
-    // Esperamos hasta que el QR esté listo para responder con él
-    const result = await initBaileys();
+    const force = url.searchParams.get('force') === 'true';
+    const result = await initBaileys(force);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: true,
       message: 'Proceso de conexión Baileys ejecutado.',
       data: {
-        isConnected: result.isConnected || isConnected,
-        hasQr: Boolean(result.qrDataUrl || currentQrDataUrl),
-        qrDataUrl: result.qrDataUrl || currentQrDataUrl,
-        user: connectedUser
+        isConnected: result.isConnected,
+        hasQr: result.hasQr,
+        qrDataUrl: result.qrDataUrl,
+        user: result.user || connectedUser
       }
     }));
     return;
@@ -284,48 +332,53 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: true,
-      message: 'Sesión de WhatsApp desconectada exitosamente.'
+      message: 'Sesión de WhatsApp desconectada correctamente.'
     }));
     return;
   }
 
   // Endpoint: POST /api/whatsapp/send
-  if (req.method === 'POST' && (url.pathname === '/api/whatsapp/send-test' || url.pathname === '/api/whatsapp/send')) {
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
+  if (req.method === 'POST' && url.pathname === '/api/whatsapp/send') {
+    if (!isConnected || !sock) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: false,
+        error: 'WhatsApp no está vinculado. Escanea el código QR primero.'
+      }));
+      return;
+    }
+
+    let bodyStr = '';
+    req.on('data', chunk => { bodyStr += chunk; });
     req.on('end', async () => {
       try {
-        const payload = JSON.parse(body || '{}');
-        const phone = String(payload.phone || payload.toPhone || '').replace(/\D/g, '');
-        const message = String(payload.message || payload.text || '');
+        const { phone, message } = JSON.parse(bodyStr || '{}');
 
         if (!phone || !message) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Se requiere teléfono y mensaje.' }));
+          res.end(JSON.stringify({ success: false, error: 'Teléfono y mensaje son obligatorios.' }));
           return;
         }
 
-        if (!sock || !isConnected) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'WhatsApp no está conectado. Escanea el código QR primero.' }));
-          return;
+        let cleanPhone = String(phone).replace(/\D/g, '');
+        if (cleanPhone.length === 10 && cleanPhone.startsWith('3')) {
+          cleanPhone = '57' + cleanPhone;
         }
+        const jid = `${cleanPhone}@s.whatsapp.net`;
 
-        const jid = `${phone}@s.whatsapp.net`;
-        const sendResult = await sock.sendMessage(jid, { text: message });
-
+        const sent = await sock.sendMessage(jid, { text: message });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           success: true,
-          data: {
-            messageId: sendResult.key.id,
-            status: 'sent',
-            recipient: phone
-          }
+          messageId: sent.key.id,
+          recipient: cleanPhone
         }));
-      } catch (err) {
+      } catch (sendErr) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: err.message }));
+        res.end(JSON.stringify({
+          success: false,
+          error: `Error al despachar mensaje: ${sendErr.message}`
+        }));
       }
     });
     return;
@@ -335,13 +388,22 @@ const server = http.createServer(async (req, res) => {
   res.end(JSON.stringify({ error: 'Ruta no encontrada en el gateway de Baileys' }));
 });
 
+// Protección contra caídas inesperadas
+process.on('uncaughtException', (err) => {
+  console.error('[BaileysGateway] Excepción no capturada (mantenimiento activo):', err.message);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[BaileysGateway] Rechazo no manejado (mantenimiento activo):', reason);
+});
+
 server.listen(PORT, () => {
   console.log(`========================================================`);
   console.log(`📡 BAILEYS GATEWAY ACTIVO EN EL PUERTO ${PORT}`);
   console.log(`🔗 Endpoint de Estado: http://localhost:${PORT}/api/whatsapp/status`);
   console.log(`========================================================`);
 
-  // Pre-iniciar la conexión para tener el QR listo inmediatamente
+  // Pre-iniciar la conexión para tener el código QR listo de inmediato
   initBaileys();
 });
 

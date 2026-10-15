@@ -3,8 +3,9 @@
  * ARCHIVO: components/BaileysQrModal/BaileysQrModal.js
  * DESCRIPCIÓN: Modal interactivo para vincular WhatsApp escaneando el código QR
  *              multi-dispositivo generado por Baileys.
- *              Totalmente compatible con Vercel Serverless mediante configuración
- *              de Gateway público (Render, Railway o túnel Ngrok / Localtunnel).
+ *              - Soporte de render continuo: el QR nunca parpadea ni desaparece.
+ *              - Auto-renovación visual transparente.
+ *              - Soporte completo de Vercel Serverless mediante túnel público o Render.
  * PRINCIPIO SOLID: Single Responsibility Principle (SRP)
  * REGLA ESTRICTA: Sin emojis. Solo vectores SVG limpios de Lucide.
  * ============================================================================
@@ -29,7 +30,8 @@ import {
   Settings,
   Check,
   Copy,
-  Server
+  Server,
+  Radio
 } from 'lucide-react';
 import { PhoneFormatter } from '@/src/services/PhoneFormatter';
 
@@ -46,13 +48,15 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
     gatewayUrl: 'http://localhost:3001'
   });
 
+  // Guardamos en memoria el último QR válido para evitar parpadeos en pantalla
+  const [persistentQr, setPersistentQr] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [testPhone, setTestPhone] = useState('');
   const [testMessage, setTestMessage] = useState('Mensaje de prueba oficial desde la Secretaría del Reinado del Río 2026.');
   const [testFeedback, setTestFeedback] = useState(null);
   const [isSendingTest, setIsSendingTest] = useState(false);
 
-  // Estados de configuración de Gateway para Vercel
+  // Configuración de Gateway para Vercel o túneles
   const [showConfig, setShowConfig] = useState(false);
   const [customGatewayUrl, setCustomGatewayUrl] = useState('');
   const [configSaving, setConfigSaving] = useState(false);
@@ -61,7 +65,7 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
 
   const pollTimerRef = useRef(null);
 
-  // Cargar URL guardada en localStorage al montar
+  // Cargar URL guardada en localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('baileys_custom_gateway_url');
@@ -71,7 +75,7 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
     }
   }, []);
 
-  // Construye las cabeceras personalizadas para peticiones al backend
+  // Cabeceras con URL personalizada
   const getHeaders = () => {
     const headers = { 'Content-Type': 'application/json' };
     if (customGatewayUrl && customGatewayUrl.trim()) {
@@ -80,7 +84,7 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
     return headers;
   };
 
-  // Consulta el estado del Gateway de Baileys
+  // Consultar estado periódicamente
   const fetchStatus = async () => {
     try {
       const headers = {};
@@ -95,6 +99,16 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
       const data = await res.json();
       setStatusData(data);
 
+      // Si llegó un QR válido, lo fijamos en memoria
+      if (data.hasQr && data.qrDataUrl) {
+        setPersistentQr(data.qrDataUrl);
+      }
+
+      // Si ya está conectado, limpiamos el QR
+      if (data.isConnected) {
+        setPersistentQr(null);
+      }
+
       if (onConnectionChanged) {
         onConnectionChanged(data);
       }
@@ -103,11 +117,11 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
     }
   };
 
-  // Iniciar sondeo periódico cada 2.5s mientras el modal esté abierto
+  // Sondeo continuo mientras el modal esté abierto
   useEffect(() => {
     if (isOpen) {
       fetchStatus();
-      pollTimerRef.current = setInterval(fetchStatus, 2500);
+      pollTimerRef.current = setInterval(fetchStatus, 2000);
     } else {
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     }
@@ -118,32 +132,32 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
 
   if (!isOpen) return null;
 
-  // Iniciar la conexión y solicitar el código QR
-  const handleConnect = async () => {
-    // Si estamos en Vercel y no hay gateway público configurado, abrir configuración
+  // Solicitar o regenerar código QR
+  const handleConnect = async (force = false) => {
     if (statusData.isVercel && (statusData.isLocalhost || !customGatewayUrl.trim())) {
       setShowConfig(true);
       setConfigFeedback({
         success: false,
-        message: 'En Vercel se requiere la URL pública del Gateway de Baileys (Render, Railway o túnel con ngrok/localtunnel).'
+        message: 'En Vercel se requiere la URL pública de tu Gateway (ej: Render o túnel local con localtunnel/ngrok).'
       });
       return;
     }
 
     setIsLoading(true);
     setTestFeedback(null);
+
     try {
-      const res = await fetch('/api/baileys/connect', {
+      const endpoint = force ? '/api/baileys/connect?force=true' : '/api/baileys/connect';
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: getHeaders()
       });
       const data = await res.json();
-      if (!res.ok || !data.success) {
-        setTestFeedback({ success: false, message: data.error || 'Error solicitando conexión.' });
-        if (data.isVercel && data.isLocalhost) {
-          setShowConfig(true);
-        }
+
+      if (data.data?.qrDataUrl) {
+        setPersistentQr(data.data.qrDataUrl);
       }
+
       await fetchStatus();
     } catch (err) {
       console.error('[BaileysQrModal] Error al conectar:', err);
@@ -153,7 +167,7 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
     }
   };
 
-  // Desconectar la sesión activa
+  // Desconectar sesión
   const handleDisconnect = async () => {
     if (!confirm('¿Deseas desconectar la sesión de WhatsApp vinculada?')) return;
     setIsLoading(true);
@@ -162,6 +176,7 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
         method: 'POST',
         headers: getHeaders()
       });
+      setPersistentQr(null);
       await fetchStatus();
     } catch (err) {
       console.error('[BaileysQrModal] Error al desconectar:', err);
@@ -170,7 +185,7 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
     }
   };
 
-  // Guardar URL de Gateway personalizada (para Vercel o túneles)
+  // Guardar URL de Gateway
   const handleSaveGatewayUrl = async (e) => {
     e?.preventDefault();
     if (!customGatewayUrl.trim()) return;
@@ -191,13 +206,13 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
         setConfigFeedback({
           success: true,
           message: data.pingSuccess
-            ? 'Gateway verificado y conectado exitosamente.'
+            ? 'Gateway verificado exitosamente. Cargando código QR...'
             : 'URL guardada. Conectando con el gateway...'
         });
         await fetchStatus();
         if (data.pingSuccess) {
           setShowConfig(false);
-          await handleConnect();
+          await handleConnect(true);
         }
       } else {
         setConfigFeedback({ success: false, message: data.error || 'Error guardando URL.' });
@@ -209,7 +224,7 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
     }
   };
 
-  // Enviar mensaje de prueba para verificar la vinculación
+  // Enviar mensaje de prueba
   const handleSendTest = async (e) => {
     e.preventDefault();
     if (!testPhone.trim() || !testMessage.trim()) return;
@@ -244,8 +259,9 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
   };
 
   const isConnected = statusData.isConnected === true;
-  const isQrReady = statusData.hasQr && Boolean(statusData.qrDataUrl);
-  const isVercelLocalhostIssue = statusData.isVercel && (statusData.isLocalhost || !statusData.gatewayOnline) && !isConnected;
+  const activeQrImage = statusData.qrDataUrl || persistentQr;
+  const isQrVisible = !isConnected && Boolean(activeQrImage);
+  const isVercelNeedsUrl = statusData.isVercel && (statusData.isLocalhost || !statusData.gatewayOnline) && !isConnected;
 
   return (
     <div style={{
@@ -291,7 +307,7 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#ffffff' }}>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#ffffff', margin: 0 }}>
                   Conectar WhatsApp (Baileys)
                 </h3>
                 {statusData.isVercel && (
@@ -312,7 +328,7 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
                   </span>
                 )}
               </div>
-              <p style={{ fontSize: '0.78rem', color: 'var(--wa-text-secondary)' }}>
+              <p style={{ fontSize: '0.78rem', color: 'var(--wa-text-secondary)', margin: '4px 0 0 0' }}>
                 Vinculación multi-dispositivo sin costos por mensaje de Meta API.
               </p>
             </div>
@@ -355,7 +371,7 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
           </div>
         </div>
 
-        {/* PANEL DE CONFIGURACIÓN DEL GATEWAY (Para Vercel o servidores remotos) */}
+        {/* PANEL DE CONFIGURACIÓN DEL GATEWAY */}
         {showConfig && (
           <div style={{
             backgroundColor: 'rgba(255, 255, 255, 0.03)',
@@ -379,7 +395,6 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
                 : 'Define la URL del servidor Baileys si estás ejecutándolo en otra máquina o puerto.'}
             </p>
 
-            {/* Formulario para guardar URL */}
             <form onSubmit={handleSaveGatewayUrl} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', gap: 8 }}>
                 <div style={{ position: 'relative', flex: 1 }}>
@@ -436,7 +451,6 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
               )}
             </form>
 
-            {/* Guía Rápida para Vercel */}
             <div style={{
               backgroundColor: 'var(--wa-bg-deep)',
               border: '1px solid var(--wa-border)',
@@ -466,7 +480,7 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
               </div>
 
               <p style={{ margin: 0, color: 'var(--wa-text-secondary)' }}>
-                2. En otra terminal, abre el túnel público gratuito:
+                2. En otra terminal, abre el túnel público:
               </p>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0d1117', padding: '6px 10px', borderRadius: 6, fontFamily: 'monospace', color: '#a78bfa' }}>
                 <code>npx localtunnel --port 3001</code>
@@ -486,8 +500,8 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
           </div>
         )}
 
-        {/* ALERTA VISUAL SI ESTÁ EN VERCEL Y TIENE EL ERROR DE LOCALHOST */}
-        {isVercelLocalhostIssue && !showConfig && (
+        {/* ALERTA DE VERCEL LOCALHOST */}
+        {isVercelNeedsUrl && !showConfig && (
           <div style={{
             backgroundColor: 'rgba(59, 130, 246, 0.08)',
             border: '1px solid rgba(59, 130, 246, 0.3)',
@@ -529,7 +543,7 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
           </div>
         )}
 
-        {/* CASO 1: CONECTADO EXITOSAMENTE */}
+        {/* CASO 1: CONECTADO */}
         {isConnected ? (
           <div style={{
             display: 'flex',
@@ -580,12 +594,11 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
               <div>
                 <span style={{ color: 'var(--wa-text-muted)', display: 'block', fontSize: '0.72rem' }}>Nombre en WhatsApp</span>
                 <strong style={{ color: '#ffffff' }}>
-                  {statusData.user?.name || 'Operador Oficial'}
+                  {statusData.user?.name || 'Operador Secretaría'}
                 </strong>
               </div>
             </div>
 
-            {/* Formulario de prueba de envío */}
             <form onSubmit={handleSendTest} style={{ width: '100%', maxWidth: 440, display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'left', borderTop: '1px solid var(--wa-border)', paddingTop: 16 }}>
               <label style={{ fontSize: '0.76rem', fontWeight: 600, color: 'var(--wa-text-secondary)' }}>
                 Enviar mensaje de prueba para verificar:
@@ -663,54 +676,82 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
               <span>Desvincular y Cerrar Sesión</span>
             </button>
           </div>
-        ) : isQrReady ? (
-          /* CASO 2: CÓDIGO QR LISTO PARA ESCANEAR */
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18 }}>
+        ) : isQrVisible ? (
+          /* CASO 2: CÓDIGO QR VISIBLE Y PERSISTENTE */
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
             <div style={{
+              position: 'relative',
               padding: 12,
               backgroundColor: '#ffffff',
               borderRadius: 12,
-              boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              {/* Imagen QR generada por Baileys */}
+              {/* Imagen del QR */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={statusData.qrDataUrl}
+                src={activeQrImage}
                 alt="Código QR de WhatsApp"
                 style={{ width: 240, height: 240, display: 'block' }}
               />
+
+              {/* Overlay mientras se solicita un nuevo QR */}
+              {isLoading && (
+                <div style={{
+                  position: 'absolute',
+                  inset: 0,
+                  backgroundColor: 'rgba(255, 255, 255, 0.85)',
+                  borderRadius: 12,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  color: '#111b21',
+                  fontSize: '0.82rem',
+                  fontWeight: 600
+                }}>
+                  <Loader2 size={24} className="animate-spin" color="#00a884" />
+                  <span>Actualizando código QR...</span>
+                </div>
+              )}
             </div>
 
-            {/* Instrucciones de vinculación */}
+            {/* Estado de sincronización en vivo */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.76rem', color: '#00a884' }}>
+              <Radio size={14} className="animate-pulse" />
+              <span>Código QR sincronizado en tiempo real. Se renueva automáticamente.</span>
+            </div>
+
+            {/* Instrucciones de escaneo */}
             <div style={{
               width: '100%',
               backgroundColor: 'rgba(255, 255, 255, 0.02)',
               border: '1px solid var(--wa-border)',
               borderRadius: 8,
-              padding: 16,
+              padding: 14,
               fontSize: '0.82rem',
               color: 'var(--wa-text-secondary)',
-              lineHeight: 1.6
+              lineHeight: 1.5
             }}>
-              <p style={{ fontWeight: 600, color: 'var(--wa-text-primary)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <p style={{ fontWeight: 600, color: 'var(--wa-text-primary)', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Smartphone size={16} color="#00a884" />
                 <span>Instrucciones para escanear desde tu teléfono:</span>
               </p>
               <ol style={{ paddingLeft: 20, margin: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <li>Abre <strong>WhatsApp</strong> en tu teléfono móvil.</li>
+                <li>Abre <strong>WhatsApp</strong> en tu teléfono celular.</li>
                 <li>Toca <strong>Menú ⋮</strong> (Android) o <strong>Configuración ⚙</strong> (iPhone).</li>
                 <li>Selecciona <strong>Dispositivos vinculados</strong> y toca <strong>Vincular un dispositivo</strong>.</li>
-                <li>Apunta la cámara de tu celular hacia este código QR para sincronizar.</li>
+                <li>Apunta la cámara de tu celular hacia este código QR.</li>
               </ol>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <button
                 type="button"
-                onClick={handleConnect}
+                onClick={() => handleConnect(true)}
                 disabled={isLoading}
                 style={{
                   display: 'flex',
@@ -719,19 +760,19 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
                   backgroundColor: 'var(--wa-bg-hover)',
                   border: '1px solid var(--wa-border)',
                   color: 'var(--wa-text-primary)',
-                  padding: '6px 14px',
+                  padding: '7px 16px',
                   borderRadius: 6,
-                  fontSize: '0.78rem',
+                  fontSize: '0.8rem',
                   cursor: 'pointer'
                 }}
               >
                 <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
-                <span>Regenerar Código QR</span>
+                <span>Regenerar Nuevo Código QR</span>
               </button>
             </div>
           </div>
         ) : (
-          /* CASO 3: GATEWAY APAGADO O ESPERANDO INICIO */
+          /* CASO 3: GATEWAY ESPERANDO INICIO */
           <div style={{
             display: 'flex',
             flexDirection: 'column',
@@ -757,13 +798,13 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
                 Iniciar Sesión de WhatsApp Web
               </h4>
               <p style={{ fontSize: '0.82rem', color: 'var(--wa-text-secondary)', maxWidth: 460, lineHeight: 1.5 }}>
-                Genera el código QR para vincular tu WhatsApp personal o institucional y comenzar a enviar y gestionar campañas masivas.
+                Genera el código QR para vincular tu WhatsApp personal o institucional y comenzar a gestionar chats y campañas.
               </p>
             </div>
 
             <button
               type="button"
-              onClick={handleConnect}
+              onClick={() => handleConnect(true)}
               disabled={isLoading}
               style={{
                 display: 'flex',
@@ -820,7 +861,7 @@ export default function BaileysQrModal({ isOpen, onClose, onConnectionChanged })
               justifyContent: 'space-between',
               gap: 12
             }}>
-              <span>Gateway actual: <code style={{ color: '#a78bfa' }}>{statusData.gatewayUrl || 'localhost:3001'}</code></span>
+              <span>Gateway actual: <code style={{ color: '#a78bfa' }}>{customGatewayUrl || statusData.gatewayUrl || 'localhost:3001'}</code></span>
               <button
                 type="button"
                 onClick={() => setShowConfig(!showConfig)}
