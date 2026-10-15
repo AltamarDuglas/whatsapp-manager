@@ -7,17 +7,18 @@
 
 ## Tabla de Contenidos
 
-1. [Visión General del Proyecto](#-visión-general-del-proyecto)
-2. [Funcionalidad Principal: Filtrado de Chats y Clasificación "Reinas"](#-funcionalidad-principal-filtrado-de-chats-y-clasificación-reinas)
-3. [Estética e Interfaz de Usuario](#-estética-e-interfaz-de-usuario)
-4. [Arquitectura y Principios SOLID Aplicados](#-arquitectura-y-principios-solid-aplicados)
-5. [Estructura del Proyecto](#-estructura-del-proyecto)
-6. [Configuración y Despliegue en Vercel](#-configuración-y-despliegue-en-vercel)
-7. [Configuración de Supabase (Paso a Paso)](#-configuración-de-supabase-paso-a-paso)
-8. [Variables de Entorno (.env)](#-variables-de-entorno-env)
-9. [Instalación y Ejecución Local](#-instalación-y-ejecución-local)
-10. [Referencia de Rutas API REST](#-referencia-de-rutas-api-rest)
-11. [Control de Versiones y Subida a GitHub](#-control-de-versiones-y-subida-a-github)
+1. [Visión General del Proyecto](#visión-general-del-proyecto)
+2. [Funcionalidad Principal: Filtrado de Chats y Clasificación "Reinas"](#funcionalidad-principal-filtrado-de-chats-y-clasificación-reinas)
+3. [Estética e Interfaz de Usuario](#estética-e-interfaz-de-usuario)
+4. [Arquitectura y Principios SOLID Aplicados](#arquitectura-y-principios-solid-aplicados)
+5. [Estructura del Proyecto](#estructura-del-proyecto)
+6. [Configuración y Despliegue en Vercel](#configuración-y-despliegue-en-vercel)
+7. [Arquitectura Baileys en Vercel (Serverless vs WebSocket)](#arquitectura-baileys-en-vercel-serverless-vs-websocket)
+8. [Configuración de Supabase (Paso a Paso)](#configuración-de-supabase-paso-a-paso)
+9. [Variables de Entorno (.env)](#variables-de-entorno-env)
+10. [Instalación y Ejecución Local](#instalación-y-ejecución-local)
+11. [Referencia de Rutas API REST](#referencia-de-rutas-api-rest)
+12. [Control de Versiones y Subida a GitHub](#control-de-versiones-y-subida-a-github)
 
 ---
 
@@ -29,7 +30,7 @@ Resuelve los siguientes retos esenciales de comunicación:
 1. **Atención Centralizada y Colaborativa:** Permite que un equipo de operadores responda los mensajes de WhatsApp directamente desde el navegador web, registrando quién respondió cada mensaje.
 2. **Filtrado Estricto por Base de Datos:** A diferencia de un WhatsApp convencional donde entran mensajes de cualquier desconocido, aquí **solo se listan y atienden los números registrados en la base de datos**.
 3. **Clasificación y Segmentación de Contactos:** Permite categorizar contactos bajo etiquetas como **"Reinas"**, **"VIP"**, **"Secretaría"**, **"Líderes"** o **"General"**, filtrando la bandeja de chats para atender grupos específicos con un solo clic.
-4. **Despliegue Serverless en Vercel:** Diseñada para operar en la infraestructura de Vercel con integración nativa a Supabase y WhatsApp Cloud API.
+4. **Despliegue Serverless en Vercel:** Diseñada para operar en la infraestructura de Vercel con integración nativa a Supabase y microservicio de Gateway para Baileys o Meta Cloud API.
 
 ---
 
@@ -81,6 +82,7 @@ El proyecto fue desarrollado bajo principios **SOLID** para asegurar que el cód
 - [`ContactService.js`](src/services/ContactService.js): Solo gestiona la lógica de negocio de contactos e importación de Excel.
 - [`ChatService.js`](src/services/ChatService.js): Solo orquesta el filtrado de hilos por lista blanca de base de datos y respuestas de operadores.
 - [`AntiBanPacingService.js`](src/services/AntiBanPacingService.js): Solo calcula pausas aleatorias (jitter) y descansos entre mensajes.
+- [`BaileysGatewayResolver.js`](src/services/BaileysGatewayResolver.js): Solo resuelve y valida la conectividad del microservicio Baileys en entornos serverless y locales.
 
 ### 2. O - Open/Closed Principle (Abierto / Cerrado)
 - Definición de contratos de interfaz: [`IMessagingProvider.js`](src/domain/interfaces/IMessagingProvider.js), [`IContactRepository.js`](src/domain/interfaces/IContactRepository.js) e [`IMessageRepository.js`](src/domain/interfaces/IMessageRepository.js).
@@ -98,89 +100,76 @@ El proyecto fue desarrollado bajo principios **SOLID** para asegurar que el cód
 
 ---
 
-## Estructura del Proyecto
-
-```text
-whatsapp-next/
-├── app/
-│   ├── api/
-│   │   ├── campaigns/send/route.js     # Endpoint de envíos masivos
-│   │   ├── categories/route.js         # Endpoint de categorías ("Reinas", "VIP", etc.)
-│   │   ├── chats/route.js              # Endpoint de chats filtrados por base de datos
-│   │   ├── chats/[phone]/route.js      # Historial de conversación y respuesta de operador
-│   │   ├── contacts/route.js           # Directorio de contactos autorizados
-│   │   ├── contacts/category/route.js  # Clasificación masiva
-│   │   ├── contacts/upload/route.js    # Carga y análisis de archivos Excel
-│   │   └── webhook/whatsapp/route.js   # Webhook para recepción de mensajes WhatsApp
-│   ├── favicon.ico
-│   ├── globals.css                     # Estilos idénticos a WhatsApp Desktop Dark Mode
-│   ├── layout.js                       # Layout raíz en Next.js
-│   └── page.js                         # Página principal de WhatsApp Desktop
-├── components/
-│   ├── ChatInbox/
-│   │   ├── CategoryBadge.js            # Selector de categorías sin emojis (con vectores)
-│   │   ├── ChatInbox.js                # Contenedor maestro de la bandeja de chats
-│   │   ├── ChatSidebar.js              # Lista de conversaciones de WhatsApp Desktop
-│   │   └── ChatWindow.js               # Ventana activa de chat con globos y caja de respuesta
-│   ├── ContactManager/
-│   │   └── ContactManager.js           # Directorio maestro de números y carga de Excel
-│   ├── MassCampaign/
-│   │   └── MassCampaign.js             # Módulo de envíos masivos anti-baneo
-│   ├── SupabaseConfigModal/
-│   │   └── SupabaseConfigModal.js      # Guía de conexión Supabase y Vercel
-│   └── WhatsAppRail.js                 # Riel vertical izquierdo de WhatsApp Desktop
-├── public/
-│   └── base_muestra.xlsx               # Archivo Excel de muestra para el Reinado
-├── src/
-│   ├── domain/
-│   │   ├── entities/                   # Contact, Message, Category
-│   │   └── interfaces/                 # IContactRepository, IMessageRepository, IMessagingProvider
-│   ├── infrastructure/
-│   │   ├── memory/                     # Repositorios en memoria para modo local/demo
-│   │   ├── providers/                  # MetaCloudProvider, BaileysBridgeProvider, MockProvider
-│   │   └── supabase/                   # Cliente Supabase y repositorios PostgreSQL
-│   └── services/                       # ContactService, ChatService, TemplateEngine, AntiBanPacingService
-├── supabase/
-│   └── schema.sql                      # Script SQL de creación de tablas, índices y RLS
-├── .env.example                        # Ejemplo de variables de entorno
-├── .env.local                          # Variables locales de desarrollo
-├── next.config.mjs                     # Configuración de Next.js
-├── package.json                        # Dependencias del proyecto
-├── vercel.json                         # Configuración de despliegue en Vercel
-└── README.md                           # Documentación técnica completa
-```
-
----
-
 ## Configuración y Despliegue en Vercel
 
-Desplegar este proyecto en Vercel toma menos de 2 minutos:
+1. **Importar el Repositorio en Vercel:**
+   - Entra a [vercel.com](https://vercel.com) e inicia sesión con tu cuenta de GitHub.
+   - Haz clic en **Add New... > Project**.
+   - Selecciona el repositorio `whatsapp-manager`.
 
-1. **Subir el código a GitHub:**
-   ```bash
-   git init
-   git add .
-   git commit -m "feat: whatsapp manager con nextjs, supabase y estetica oficial"
-   git branch -M main
-   git remote add origin https://github.com/AltamarDuglas/whatsapp-manager.git
-   git push -u origin main
-   ```
+2. **Configurar el Root Directory:**
+   - Si el repositorio contiene únicamente el contenido de `whatsapp-next`, déjalo en `./`.
+   - Si está en una subcarpeta, selecciona `whatsapp-next`.
 
-2. **Importar el proyecto en Vercel:**
-   - Inicia sesión en [vercel.com](https://vercel.com).
-   - Haz clic en **Add New > Project** y selecciona el repositorio `whatsapp-manager`.
-   - Vercel detectará automáticamente que es un proyecto **Next.js**.
-
-3. **Configurar las Variables de Entorno en Vercel:**
-   En la sección **Environment Variables**, agrega:
-   - `NEXT_PUBLIC_SUPABASE_URL`: Tu URL del proyecto de Supabase.
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Tu clave pública `anon` de Supabase.
-   - `WHATSAPP_TOKEN` (Opcional si usas Meta Cloud API).
-   - `WHATSAPP_PHONE_NUMBER_ID` (Opcional si usas Meta Cloud API).
-   - `WHATSAPP_VERIFY_TOKEN`: Token para verificar webhooks de Meta.
+3. **Configurar Variables de Entorno en Vercel:**
+   En la sección **Environment Variables** añade:
+   - `NEXT_PUBLIC_SUPABASE_URL`: URL del proyecto en Supabase.
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Llave pública anónima de Supabase.
+   - `BAILEYS_GATEWAY_URL`: URL pública de tu Gateway de Baileys (ej: `https://mi-gateway.onrender.com` o túnel `localtunnel`).
+   - `WHATSAPP_TOKEN`: (Opcional) Si utilizas Meta WhatsApp Cloud API.
+   - `WHATSAPP_PHONE_NUMBER_ID`: (Opcional) ID de teléfono de Meta Cloud.
+   - `WHATSAPP_VERIFY_TOKEN`: (Opcional) Token para verificar webhooks de Meta.
 
 4. **Hacer clic en Deploy:**
    Vercel compilará la aplicación y generará la URL de producción accesible mundialmente.
+
+---
+
+## Arquitectura Baileys en Vercel (Serverless vs WebSocket)
+
+### ¿Por qué Vercel requiere un Gateway público para Baileys?
+
+- **Vercel es Serverless (AWS Lambda):** Las rutas de API en Vercel se ejecutan como micro-contenedores efímeros que se congelan y destruyen en segundos tras responder cada petición HTTP.
+- **Baileys requiere conexión persistente (TCP/WebSocket):** Para sincronizar WhatsApp Web con los servidores de WhatsApp (`web.whatsapp.com`), Baileys debe mantener un socket abierto 24/7 y almacenar las credenciales de sesión multi-dispositivo en disco.
+- **¿Por qué `localhost:3001` no funciona en Vercel?:** Cuando la aplicación corre en `https://tu-app.vercel.app`, el servidor de Next.js está en la nube en Estados Unidos; por ende, no puede conectarse a `localhost` de tu computador.
+
+### Soluciones Implementadas:
+
+```
+┌─────────────────────────────────┐        HTTPS        ┌───────────────────────────────────┐        WebSocket       ┌────────────────────────┐
+│      Next.js en Vercel          │ ──────────────────> │      Gateway Baileys (Node.js)    │ ─────────────────────> │   WhatsApp Web Server  │
+│  (Frontend + API Routes Server) │ <────────────────── │ (Render, Railway o Túnel Local)   │ <───────────────────── │  (web.whatsapp.com)   │
+└─────────────────────────────────┘                     └───────────────────────────────────┘                        └────────────────────────┘
+```
+
+#### Opción A: Túnel Público Gratuito en 1 Minuto (Ideal para pruebas rápidas)
+Si ejecutas el gateway en tu computadora y quieres controlarlo desde tu despliegue en Vercel:
+1. En tu computadora ejecuta el gateway:
+   ```bash
+   npm run gateway
+   ```
+2. En otra terminal abre el túnel público:
+   ```bash
+   npx localtunnel --port 3001
+   ```
+   *(o si tienes ngrok: `ngrok http 3001`)*
+3. Obtendrás una URL como `https://brave-frog-45.loca.lt`.
+4. Abre tu app en Vercel, entra a la opción **Conectar WhatsApp (QR)**, pulsa **Gateway** y pega esa URL. ¡El código QR aparecerá al instante!
+
+#### Opción B: Despliegue 24/7 en la Nube con Render (100% Gratuito y Permanente)
+Hemos incluido en el proyecto el [`Dockerfile`](Dockerfile) y el archivo de despliegue automático [`render.yaml`](render.yaml):
+1. Entra a [render.com](https://render.com) y crea una cuenta gratuita.
+2. Crea un **New Web Service** conectado a tu repositorio de GitHub `whatsapp-manager`.
+3. Render detectará automáticamente el archivo `render.yaml` o Dockerfile.
+4. Render te asignará una URL pública HTTPS como `https://whatsapp-baileys-gateway.onrender.com`.
+5. En Vercel, agrega la variable de entorno:
+   ```env
+   BAILEYS_GATEWAY_URL=https://whatsapp-baileys-gateway.onrender.com
+   ```
+   ¡Listo! Tu Gateway estará disponible en la nube de forma permanente sin que tengas que tener tu computador encendido.
+
+#### Opción C: Meta WhatsApp Cloud API (100% Nativo en Vercel)
+Si prefieres no gestionar servidores externos de Baileys, puedes utilizar la API Oficial de Meta Cloud configurando las credenciales en Vercel. La aplicación conmuta automáticamente al proveedor oficial sin requerir ningún microservicio.
 
 ---
 
@@ -215,8 +204,8 @@ WHATSAPP_TOKEN=EAAG...
 WHATSAPP_PHONE_NUMBER_ID=123456789012345
 WHATSAPP_VERIFY_TOKEN=secretaria_token_seguro
 
-# Enlace a servidor local Baileys (Modo Híbrido opcional)
-BAILEYS_GATEWAY_URL=http://localhost:3000
+# Enlace al microservicio Gateway de Baileys (Para Vercel o local)
+BAILEYS_GATEWAY_URL=http://localhost:3001
 ```
 
 ---
@@ -232,7 +221,10 @@ cd whatsapp-next
 # 2. Instalar dependencias
 npm install
 
-# 3. Iniciar el servidor de desarrollo
+# 3. Iniciar el Gateway de Baileys (en una terminal)
+npm run gateway
+
+# 4. Iniciar el servidor de desarrollo Next.js (en otra terminal)
 npm run dev
 ```
 
@@ -261,31 +253,9 @@ Abre tu navegador en:
 | `POST` | `/api/baileys/connect` | Inicializa la sesión de Baileys y solicita/regenera el código QR de vinculación. |
 | `POST` | `/api/baileys/disconnect` | Desconecta la sesión activa de WhatsApp Web y limpia credenciales en disco. |
 | `POST` | `/api/baileys/send` | Despacha un mensaje de WhatsApp a través del número vinculado por Baileys. |
+| `GET/POST`| `/api/baileys/config` | Consulta o actualiza la URL remota del gateway de Baileys (persiste en cookie y prueba ping). |
 | `POST` | `/api/campaigns/send` | Ejecuta un envío masivo con plantilla dinámica y protección anti-baneo. |
 | `GET/POST`| `/api/webhook/whatsapp` | Webhook para recibir mensajes entrantes de Meta WhatsApp o Gateway. |
-
----
-
-## Conexión a WhatsApp mediante Código QR (Baileys)
-
-La plataforma incluye integración nativa con **@whiskeysockets/baileys** para vincular un número de WhatsApp real sin pagar costos por mensaje a Meta:
-
-### 1. Iniciar el Gateway de Baileys
-En una terminal ejecuta:
-```bash
-npm run gateway
-```
-*El servicio se iniciará en el puerto 3001 (`http://localhost:3001`), manteniendo el WebSocket activo y guardando las sesiones de forma segura en `data/baileys_auth/`.*
-
-### 2. Vincular el Celular desde la Interfaz Web
-1. En la aplicación web haz clic en el botón superior **"Conectar WhatsApp (QR)"** o en el icono de código QR del riel lateral izquierdo.
-2. Si el gateway está activo, el código QR se generará automáticamente en pantalla.
-3. Abre WhatsApp en tu celular:
-   - En Android: toca los tres puntos verticales `⋮` > **Dispositivos vinculados** > **Vincular un dispositivo**.
-   - En iPhone: ve a **Configuración** > **Dispositivos vinculados** > **Vincular un dispositivo**.
-4. Escanea el código QR en la pantalla de tu ordenador.
-5. La interfaz se actualizará al instante a **"¡WhatsApp Conectado y Activo!"**, mostrando el número de teléfono y nombre vinculado.
-6. Puedes enviar un mensaje de prueba desde el mismo modal para verificar el despacho.
 
 ---
 
@@ -297,23 +267,14 @@ Para subir únicamente el proyecto `whatsapp-next` al repositorio `whatsapp-mana
 # Dentro de la carpeta whatsapp-next:
 cd whatsapp-next
 
-# Inicializar git
-git init
-
-# Agregar todos los archivos
+# Agregar todos los cambios
 git add .
 
-# Crear commit inicial
-git commit -m "feat: conversion a nextjs con supabase, filtro de bd y estetica whatsapp desktop"
+# Crear commit explicativo
+git commit -m "feat: arquitectura serverless para vercel con soporte de baileys gateway remoto"
 
-# Configurar rama principal
-git branch -M main
-
-# Vincular repositorio remoto
-git remote add origin https://github.com/AltamarDuglas/whatsapp-manager.git
-
-# Enviar a GitHub
-git push -u origin main
+# Enviar a la rama principal de GitHub
+git push origin main
 ```
 
 ---

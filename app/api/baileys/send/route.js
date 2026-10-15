@@ -2,14 +2,27 @@
  * ============================================================================
  * ARCHIVO: app/api/baileys/send/route.js
  * DESCRIPCIÓN: Despacha un mensaje de texto a través de la sesión activa de Baileys.
+ *              Compatible con Vercel Serverless mediante resolución dinámica del Gateway.
  * PRINCIPIO SOLID: Single Responsibility Principle (SRP)
  * ============================================================================
  */
 
 import { NextResponse } from 'next/server';
+import { BaileysGatewayResolver } from '@/src/services/BaileysGatewayResolver';
 
 export async function POST(request) {
-  const gatewayUrl = (process.env.BAILEYS_GATEWAY_URL || 'http://localhost:3001').replace(/\/$/, '');
+  const resolution = BaileysGatewayResolver.resolve(request);
+  const { url: gatewayUrl, isInvalidVercelLocalhost } = resolution;
+
+  if (isInvalidVercelLocalhost) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'En Vercel se requiere la URL pública del Gateway de Baileys para despachar mensajes.'
+      },
+      { status: 400 }
+    );
+  }
 
   try {
     const { phone, message } = await request.json();

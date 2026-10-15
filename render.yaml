@@ -1,0 +1,17 @@
+# ============================================================================
+# ARCHIVO: render.yaml
+# DESCRIPCIÓN: Blueprint de despliegue en Render.com para el Baileys Gateway
+# ============================================================================
+services:
+  - type: web
+    name: whatsapp-baileys-gateway
+    env: node
+    plan: free
+    region: oregon
+    buildCommand: npm ci --omit=dev
+    startCommand: node scripts/baileys-gateway.cjs
+    envVars:
+      - key: PORT
+        value: 3001
+      - key: NODE_ENV
+        value: production

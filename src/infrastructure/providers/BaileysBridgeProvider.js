@@ -11,7 +11,7 @@
 import { IMessagingProvider } from '../../domain/interfaces/IMessagingProvider';
 
 export class BaileysBridgeProvider extends IMessagingProvider {
-  constructor({ gatewayUrl = process.env.BAILEYS_GATEWAY_URL || 'http://localhost:3000' } = {}) {
+  constructor({ gatewayUrl = process.env.BAILEYS_GATEWAY_URL || 'http://localhost:3001' } = {}) {
     super();
     this.gatewayUrl = gatewayUrl.replace(/\/$/, '');
     this.name = 'baileys_bridge';
@@ -45,11 +45,11 @@ export class BaileysBridgeProvider extends IMessagingProvider {
   async sendMessage(toPhone, text) {
     try {
       const cleanPhone = String(toPhone).replace(/\D/g, '');
-      const res = await fetch(`${this.gatewayUrl}/api/whatsapp/send-test`, {
+      const res = await fetch(`${this.gatewayUrl}/api/whatsapp/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: cleanPhone, message: text }),
-        signal: AbortSignal.timeout(8000)
+        signal: AbortSignal.timeout(10000)
       });
 
       const data = await res.json();
