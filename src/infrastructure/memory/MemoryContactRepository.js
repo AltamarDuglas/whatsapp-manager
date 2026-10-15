@@ -1,44 +1,49 @@
 /**
  * ============================================================================
  * ARCHIVO: src/infrastructure/memory/MemoryContactRepository.js
- * DESCRIPCIÓN: Repositorio en memoria con datos semilla precargados.
+ * DESCRIPCIÓN: Repositorio en memoria con contactos del Reinado del Río 2026.
  * PRINCIPIO SOLID: Liskov Substitution Principle (LSP)
- *   - Permite que la plataforma funcione de inmediato en modo local/demo
- *     o cuando aún no se han configurado las claves de Supabase.
  * ============================================================================
  */
 
 import { IContactRepository } from '../../domain/interfaces/IContactRepository';
 import { Contact } from '../../domain/entities/Contact';
 
-// Almacén en memoria global para el ciclo de vida del proceso
 let memoryContacts = [
   new Contact({
-    id: 'c1111111-1111-1111-1111-111111111111',
+    id: 'c-reina-1',
+    phone: '573013452961',
+    name: 'Laura Vanessa Reyes Guzmán (Reina Central)',
+    category: 'Reinas',
+    notes: 'Candidata oficial Reinado del Río 2026. Seguimiento a disponibilidad.',
+    customFields: { cargo: 'Candidata Barrio El Río', estado: 'Inscrita' }
+  }),
+  new Contact({
+    id: 'c-reina-2',
     phone: '573001234501',
-    name: 'Valentina Gómez (Reina Central)',
+    name: 'Valentina Gómez (Reina Cívica)',
     category: 'Reinas',
-    notes: 'Reina del Certamen Departamental 2026. Requiere confirmación de agenda.',
-    customFields: { cargo: 'Reina Central', municipio: 'Sede Principal' }
+    notes: 'Reina Cívica 2026. Confirmación de rueda de prensa.',
+    customFields: { cargo: 'Reina Cívica', sector: 'Distrito Norte' }
   }),
   new Contact({
-    id: 'c2222222-2222-2222-2222-222222222222',
-    phone: '573001234502',
-    name: 'Camila Restrepo (Reina Cívica)',
-    category: 'Reinas',
-    notes: 'Candidata cívica. Solicitó vestuario para el desfile inaugural.',
-    customFields: { cargo: 'Reina Cívica', municipio: 'Distrito Norte' }
-  }),
-  new Contact({
-    id: 'c3333333-3333-3333-3333-333333333333',
+    id: 'c-reina-3',
     phone: '573001234503',
     name: 'Isabella Morales (Virreina)',
     category: 'Reinas',
-    notes: 'Virreina del concurso. Atenta a itinerario de protocolo.',
-    customFields: { cargo: 'Virreina', municipio: 'Distrito Sur' }
+    notes: 'Virreina del concurso. Itinerario de protocolo y desfile.',
+    customFields: { cargo: 'Virreina', sector: 'Distrito Sur' }
   }),
   new Contact({
-    id: 'c4444444-4444-4444-4444-444444444444',
+    id: 'c-reina-4',
+    phone: '573001234502',
+    name: 'Camila Restrepo (Candidata)',
+    category: 'Reinas',
+    notes: 'Candidata barrial. Consulta sobre guión protocolario.',
+    customFields: { cargo: 'Candidata', sector: 'La Granja' }
+  }),
+  new Contact({
+    id: 'c-vip-1',
     phone: '573109876543',
     name: 'Dr. Carlos Mendoza (Secretario General)',
     category: 'VIP',
@@ -46,7 +51,7 @@ let memoryContacts = [
     customFields: { cargo: 'Secretario General', dependencia: 'Despacho' }
   }),
   new Contact({
-    id: 'c5555555-5555-5555-5555-555555555555',
+    id: 'c-sec-1',
     phone: '573155554433',
     name: 'Dra. María Fernanda López',
     category: 'Secretaría',
@@ -54,11 +59,11 @@ let memoryContacts = [
     customFields: { cargo: 'Coordinadora', dependencia: 'Prensa' }
   }),
   new Contact({
-    id: 'c6666666-6666-6666-6666-666666666666',
+    id: 'c-lid-1',
     phone: '573204443322',
     name: 'Javier Peña (Líder Comuna 4)',
     category: 'Líderes',
-    notes: 'Líder comunal. Seguimiento a proyecto deportivo.',
+    notes: 'Líder comunal. Seguimiento a proyecto del reinado.',
     customFields: { comuna: 'Comuna 4', sector: 'El Triunfo' }
   })
 ];
@@ -80,7 +85,7 @@ export class MemoryContactRepository extends IContactRepository {
       );
     }
 
-    return result.sort((a, b) => a.name.localeCompare(b.name));
+    return result;
   }
 
   async findByPhone(phone) {
@@ -100,7 +105,7 @@ export class MemoryContactRepository extends IContactRepository {
     }
     const newContact = new Contact({
       ...contact.toJSON(),
-      id: contact.id || `c-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`
+      id: contact.id || `c-${Date.now()}`
     });
     memoryContacts.push(newContact);
     return newContact;

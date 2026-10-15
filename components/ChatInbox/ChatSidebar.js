@@ -3,7 +3,7 @@
  * ARCHIVO: components/ChatInbox/ChatSidebar.js
  * DESCRIPCIÓN: Panel de chats idéntico a WhatsApp Desktop (Modo Oscuro).
  * PRINCIPIO SOLID: Single Responsibility Principle (SRP)
- * REGLA ESTRICTA: Sin emojis. Solo vectores SVG limpios.
+ * REGLA ESTRICTA: Sin emojis. Solo vectores SVG limpios de Lucide.
  * ============================================================================
  */
 
@@ -19,8 +19,6 @@ import {
   Building2,
   Users,
   CheckCheck,
-  Pin,
-  FileSpreadsheet,
   ChevronDown,
   ShieldCheck
 } from 'lucide-react';
@@ -46,9 +44,6 @@ export default function ChatSidebar({
   ];
 
   const reinasCount = chats.filter((c) => c.category?.toLowerCase() === 'reinas').length;
-  const unreadTotal = chats.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
-
-  // Paleta de colores para avatares circulares de WhatsApp
   const avatarColors = ['#1e3a5f', '#1b4332', '#4c1d95', '#7c2d12', '#374151', '#065f46'];
 
   return (
@@ -61,13 +56,14 @@ export default function ChatSidebar({
         backgroundColor: 'var(--wa-bg-sidebar)',
         borderRight: '1px solid var(--wa-border)',
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        overflow: 'hidden'
       }}
     >
       {/* Cabecera idéntica a WhatsApp: "Chats" + ⋮ + Botón verde circular (+) */}
-      <div style={{ padding: '12px 16px 8px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <h1 style={{ fontSize: '1.3rem', fontWeight: 700, color: '#ffffff', letterSpacing: '-0.01em' }}>
+      <div style={{ padding: '20px 16px 10px 16px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <h1 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#ffffff', letterSpacing: '-0.01em', lineHeight: 1.2 }}>
             Chats
           </h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -89,7 +85,7 @@ export default function ChatSidebar({
             <button
               type="button"
               className="wa-btn-round-green"
-              title="Registrar nuevo número autorizado"
+              title="Nuevo chat"
               style={{ width: 34, height: 34 }}
             >
               <Plus size={20} color="#111b21" strokeWidth={2.5} />
@@ -97,7 +93,7 @@ export default function ChatSidebar({
           </div>
         </div>
 
-        {/* Buscador de WhatsApp con icono de lupa */}
+        {/* Buscador de WhatsApp */}
         <div style={{ position: 'relative', marginBottom: 10 }}>
           <Search
             size={16}
@@ -171,7 +167,8 @@ export default function ChatSidebar({
         alignItems: 'center',
         justifyContent: 'space-between',
         fontSize: '0.72rem',
-        color: '#00a884'
+        color: '#00a884',
+        flexShrink: 0
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <ShieldCheck size={13} />
@@ -211,7 +208,7 @@ export default function ChatSidebar({
                   display: 'flex',
                   alignItems: 'center',
                   gap: 14,
-                  padding: '10px 16px',
+                  padding: '12px 16px',
                   borderBottom: '1px solid rgba(134, 150, 160, 0.08)',
                   cursor: 'pointer',
                   backgroundColor: isSelected ? 'var(--wa-bg-active)' : 'transparent',
@@ -238,7 +235,7 @@ export default function ChatSidebar({
                 {/* Contenido del Item */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {/* Fila superior: Nombre + Hora */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
                     <h3 style={{
                       fontSize: '0.94rem',
                       fontWeight: hasUnread ? 700 : 500,
@@ -283,10 +280,8 @@ export default function ChatSidebar({
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                      {/* Badge de categoría sutil */}
                       <CategoryBadge category={chat.category || 'General'} editable={false} />
 
-                      {/* Contador de no leídos verde de WhatsApp */}
                       {hasUnread && (
                         <span className="wa-badge-unread">
                           {chat.unreadCount}

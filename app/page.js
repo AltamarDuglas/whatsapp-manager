@@ -1,9 +1,9 @@
 /**
  * ============================================================================
  * ARCHIVO: app/page.js
- * DESCRIPCIÓN: Vista principal de WhatsApp Desktop (Dark Mode).
+ * DESCRIPCIÓN: Ventana principal de WhatsApp Desktop (Dark Mode).
  * PRINCIPIO SOLID: Single Responsibility Principle (SRP)
- * REGLA ESTRICTA: Sin emojis. Solo vectores SVG limpios.
+ * REGLA ESTRICTA: Sin emojis. Solo vectores SVG limpios de Lucide.
  * ============================================================================
  */
 
@@ -15,7 +15,7 @@ import ChatInbox from '@/components/ChatInbox/ChatInbox';
 import ContactManager from '@/components/ContactManager/ContactManager';
 import MassCampaign from '@/components/MassCampaign/MassCampaign';
 import SupabaseConfigModal from '@/components/SupabaseConfigModal/SupabaseConfigModal';
-import { Minus, Square, X, MessageSquare, Database } from 'lucide-react';
+import { Minus, Square, X, MessageSquare, Database, ShieldCheck } from 'lucide-react';
 
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState('chats'); // 'chats' | 'contacts' | 'campaigns'
@@ -24,7 +24,6 @@ export default function HomePage() {
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
   const [supabaseConfigured, setSupabaseConfigured] = useState(false);
 
-  // Cargar contactos para estadísticas globales
   const loadContactsData = async () => {
     try {
       const res = await fetch('/api/contacts');
@@ -50,6 +49,14 @@ export default function HomePage() {
     }
   }, []);
 
+  // Memoizar el manejador de estadísticas para evitar ciclos de renderizado
+  const handleStatsUpdate = React.useCallback(({ total, reinas }) => {
+    setStats((prev) => {
+      if (prev.total === total && prev.reinas === reinas) return prev;
+      return { total, reinas };
+    });
+  }, []);
+
   return (
     <div style={{
       width: '100vw',
@@ -59,25 +66,26 @@ export default function HomePage() {
       backgroundColor: 'var(--wa-bg-deep)',
       overflow: 'hidden'
     }}>
-      {/* Barra de Título Superior de WhatsApp Desktop (Estilo Windows App del screenshot) */}
-      <div style={{
-        height: 32,
-        minHeight: 32,
+      {/* Barra de Título Superior de WhatsApp Desktop */}
+      <header style={{
+        height: 38,
+        minHeight: 38,
         backgroundColor: 'var(--wa-bg-deep)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 12px',
-        borderBottom: '1px solid rgba(134, 150, 160, 0.08)',
-        fontSize: '0.74rem',
+        padding: '0 16px',
+        borderBottom: '1px solid var(--wa-border)',
+        fontSize: '0.76rem',
         color: 'var(--wa-text-secondary)',
-        userSelect: 'none'
+        userSelect: 'none',
+        flexShrink: 0
       }}>
-        {/* Logo y título de WhatsApp */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Logo WhatsApp + Título oficial */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
-            width: 16,
-            height: 16,
+            width: 18,
+            height: 18,
             borderRadius: '50%',
             backgroundColor: '#00a884',
             display: 'flex',
@@ -85,49 +93,51 @@ export default function HomePage() {
             justifyContent: 'center',
             color: '#111b21'
           }}>
-            <MessageSquare size={10} strokeWidth={3} />
+            <MessageSquare size={11} strokeWidth={3} />
           </div>
-          <span style={{ fontWeight: 600, color: 'var(--wa-text-primary)' }}>
+          <span style={{ fontWeight: 600, color: 'var(--wa-text-primary)', fontSize: '0.82rem' }}>
             WhatsApp
           </span>
-          <span style={{ color: 'var(--wa-text-muted)' }}>&middot;</span>
-          <span style={{ color: 'var(--wa-text-muted)' }}>
-            Secretaría &bull; Gestión y Clasificación de Reinas
+          <span style={{ color: 'var(--wa-text-dim)' }}>|</span>
+          <span style={{ color: 'var(--wa-text-muted)', fontSize: '0.76rem' }}>
+            Secretaría &bull; Reinado del Río 2026
           </span>
         </div>
 
-        {/* Botones de ventana de Windows (minimizar, maximizar, cerrar) + botón Supabase */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        {/* Estado Supabase y Controles de Ventana */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <button
             type="button"
             onClick={() => setIsSupabaseModalOpen(true)}
             style={{
-              background: 'none',
-              border: 'none',
+              background: supabaseConfigured ? 'rgba(0, 168, 132, 0.12)' : 'rgba(251, 191, 36, 0.12)',
+              border: supabaseConfigured ? '1px solid rgba(0, 168, 132, 0.3)' : '1px solid rgba(251, 191, 36, 0.3)',
+              borderRadius: '6px',
+              padding: '3px 9px',
               color: supabaseConfigured ? '#00a884' : '#fbbf24',
               fontSize: '0.72rem',
               fontWeight: 600,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: 5
+              gap: 6
             }}
           >
             <Database size={12} />
             <span>{supabaseConfigured ? 'Supabase Conectado' : 'Modo Demo (Conectar Supabase)'}</span>
           </button>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, color: 'var(--wa-text-muted)', marginLeft: 8 }}>
-            <Minus size={12} />
-            <Square size={10} />
-            <X size={12} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 18, color: 'var(--wa-text-muted)' }}>
+            <Minus size={13} style={{ cursor: 'pointer' }} />
+            <Square size={11} style={{ cursor: 'pointer' }} />
+            <X size={13} style={{ cursor: 'pointer' }} />
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Cuerpo Principal de la Aplicación: Riel Izquierdo + Área de Trabajo */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        {/* Riel Vertical Izquierdo de Iconos */}
+      {/* Área de Trabajo de la Aplicación */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', height: 'calc(100vh - 38px)' }}>
+        {/* Riel Lateral Izquierdo */}
         <WhatsAppRail
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -135,14 +145,10 @@ export default function HomePage() {
           reinasCount={stats.reinas}
         />
 
-        {/* Panel Central Dinámico */}
+        {/* Panel Central */}
         <main style={{ flex: 1, height: '100%', overflow: 'hidden', display: 'flex' }}>
           {activeTab === 'chats' && (
-            <ChatInbox
-              onStatsUpdate={({ total, reinas }) => {
-                setStats({ total, reinas });
-              }}
-            />
+            <ChatInbox onStatsUpdate={handleStatsUpdate} />
           )}
 
           {activeTab === 'contacts' && (
@@ -161,7 +167,7 @@ export default function HomePage() {
         </main>
       </div>
 
-      {/* Modal de Conexión de Supabase y Despliegue en Vercel */}
+      {/* Modal de Supabase & Vercel */}
       <SupabaseConfigModal
         isOpen={isSupabaseModalOpen}
         onClose={() => setIsSupabaseModalOpen(false)}

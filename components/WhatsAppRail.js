@@ -3,7 +3,7 @@
  * ARCHIVO: components/WhatsAppRail.js
  * DESCRIPCIÓN: Riel vertical izquierdo idéntico a WhatsApp Desktop (Modo Oscuro).
  * PRINCIPIO SOLID: Single Responsibility Principle (SRP)
- * REGLA ESTRICTA: Sin emojis. Solo vectores SVG limpios de alta fidelidad.
+ * REGLA ESTRICTA: Sin emojis. Solo vectores SVG limpios.
  * ============================================================================
  */
 
@@ -19,8 +19,7 @@ import {
   Sparkles,
   Database,
   Send,
-  Settings,
-  ShieldCheck
+  Settings
 } from 'lucide-react';
 
 export default function WhatsAppRail({ activeTab, setActiveTab, unreadTotal = 0, reinasCount = 0 }) {
@@ -30,19 +29,20 @@ export default function WhatsAppRail({ activeTab, setActiveTab, unreadTotal = 0,
       style={{
         width: 64,
         minWidth: 64,
-        height: '100vh',
+        height: '100%',
         backgroundColor: 'var(--wa-bg-rail)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '14px 0',
-        borderRight: '1px solid var(--wa-border)'
+        padding: '16px 0',
+        borderRight: '1px solid var(--wa-border)',
+        zIndex: 10
       }}
     >
       {/* Grupo Superior de Iconos */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-        {/* Chats (Pestaña principal de la Bandeja de entrada) */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+        {/* Chats (Bandeja principal) */}
         <button
           type="button"
           onClick={() => setActiveTab('chats')}
@@ -87,7 +87,7 @@ export default function WhatsAppRail({ activeTab, setActiveTab, unreadTotal = 0,
         <button
           type="button"
           onClick={() => setActiveTab('contacts')}
-          title="Directorio Maestro de Números (Base de Datos & Excel)"
+          title="Directorio de Números Autorizados (Base de Datos & Excel)"
           style={{
             position: 'relative',
             width: 44,
@@ -146,7 +146,7 @@ export default function WhatsAppRail({ activeTab, setActiveTab, unreadTotal = 0,
           <Send size={21} strokeWidth={activeTab === 'campaigns' ? 2.3 : 1.8} />
         </button>
 
-        {/* Estados / Historias */}
+        {/* Estados */}
         <button
           type="button"
           title="Estados"
@@ -206,10 +206,10 @@ export default function WhatsAppRail({ activeTab, setActiveTab, unreadTotal = 0,
           <Users size={21} strokeWidth={1.8} />
         </button>
 
-        {/* Meta AI / Asistente IA */}
+        {/* Asistente IA */}
         <button
           type="button"
-          title="Asistente IA"
+          title="Asistente IA Secretaría"
           style={{
             width: 44,
             height: 44,
@@ -227,11 +227,11 @@ export default function WhatsAppRail({ activeTab, setActiveTab, unreadTotal = 0,
         </button>
       </div>
 
-      {/* Grupo Inferior de Iconos */}
+      {/* Grupo Inferior */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
         <button
           type="button"
-          title="Ajustes y Configuración"
+          title="Ajustes"
           style={{
             width: 44,
             height: 44,
@@ -248,7 +248,7 @@ export default function WhatsAppRail({ activeTab, setActiveTab, unreadTotal = 0,
           <Settings size={21} strokeWidth={1.8} />
         </button>
 
-        {/* Avatar de Perfil de la Secretaría */}
+        {/* Avatar de Perfil */}
         <div
           title="Secretaría Institucional"
           style={{

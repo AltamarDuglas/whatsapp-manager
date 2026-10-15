@@ -22,7 +22,30 @@ export default function ChatInbox({ onStatsUpdate }) {
   const [activeChat, setActiveChat] = useState(null);
   const [isSending, setIsSending] = useState(false);
 
-  // 1. Cargar lista de chats filtrados desde la API
+  const onStatsUpdateRef = React.useRef(onStatsUpdate);
+  React.useEffect(() => {
+    onStatsUpdateRef.current = onStatsUpdate;
+  }, [onStatsUpdate]);
+
+  // Cargar historial del chat seleccionado
+  const fetchChatHistory = useCallback(async (phone) => {
+    try {
+      const res = await fetch(`/api/chats/${phone}`);
+      const data = await res.json();
+      if (data.success) {
+        setActiveChat(data.data);
+      }
+    } catch (err) {
+      console.error('[ChatInbox] Error al cargar historial:', err);
+    }
+  }, []);
+
+  const fetchChatHistoryRef = React.useRef(fetchChatHistory);
+  React.useEffect(() => {
+    fetchChatHistoryRef.current = fetchChatHistory;
+  }, [fetchChatHistory]);
+
+  // Cargar lista de chats filtrados desde la API
   const fetchChats = useCallback(async () => {
     try {
       const params = new URLSearchParams();
@@ -38,17 +61,26 @@ export default function ChatInbox({ onStatsUpdate }) {
 
       if (data.success) {
         setChats(data.data || []);
-        if (onStatsUpdate) {
+        if (onStatsUpdateRef.current) {
           const reinas = (data.data || []).filter(
             (c) => c.category?.toLowerCase() === 'reinas'
           ).length;
-          onStatsUpdate({ total: data.data.length, reinas });
+          onStatsUpdateRef.current({ total: data.data.length, reinas });
         }
 
-        // Si no hay seleccionado un chat y hay resultados, seleccionamos el primero automáticamente
-        if (!selectedPhone && data.data && data.data.length > 0) {
-          setSelectedPhone(data.data[0].phone);
-          fetchChatHistory(data.data[0].phone);
+        // Si no hay seleccionado un chat, seleccionamos el primero que tenga mensajes activos
+        if (data.data && data.data.length > 0) {
+          setSelectedPhone((prevPhone) => {
+            const currentChatStillExists = data.data.some((c) => c.phone === prevPhone);
+            if (!prevPhone || !currentChatStillExists) {
+              const activeContact = data.data.find(
+                (c) => c.lastMessage && c.lastMessage !== 'Sin mensajes previos'
+              ) || data.data[0];
+              fetchChatHistoryRef.current(activeContact.phone);
+              return activeContact.phone;
+            }
+            return prevPhone;
+          });
         }
       }
     } catch (err) {
@@ -56,31 +88,18 @@ export default function ChatInbox({ onStatsUpdate }) {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedCategory, searchQuery, onStatsUpdate, selectedPhone]);
+  }, [selectedCategory, searchQuery]);
 
   useEffect(() => {
     fetchChats();
   }, [fetchChats]);
-
-  // 2. Cargar historial del chat seleccionado
-  const fetchChatHistory = async (phone) => {
-    try {
-      const res = await fetch(`/api/chats/${phone}`);
-      const data = await res.json();
-      if (data.success) {
-        setActiveChat(data.data);
-      }
-    } catch (err) {
-      console.error('[ChatInbox] Error al cargar historial:', err);
-    }
-  };
 
   const handleSelectChat = (phone) => {
     setSelectedPhone(phone);
     fetchChatHistory(phone);
   };
 
-  // 3. Enviar respuesta desde el operador
+  // Enviar respuesta desde el operador
   const handleSendMessage = async ({ phone, content, repliedBy }) => {
     setIsSending(true);
     try {
@@ -103,7 +122,7 @@ export default function ChatInbox({ onStatsUpdate }) {
     }
   };
 
-  // 4. Cambiar y guardar la categoría del contacto (ej. a "Reinas")
+  // Cambiar y guardar la categoría del contacto (ej. a "Reinas")
   const handleUpdateCategory = async (phone, newCategory) => {
     try {
       const res = await fetch(`/api/chats/${phone}`, {

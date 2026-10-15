@@ -81,7 +81,7 @@ export class ChatService {
     }
 
     // 3. También incluimos los contactos registrados que aún no tienen mensajes previos
-    // para que el operador pueda iniciarles conversación si lo desea
+    // para que el operador pueda iniciarles conversación si lo desea, pero al final de la lista
     for (const contact of contacts) {
       if (!phonesWithMessages.has(contact.phone)) {
         chatList.push({
@@ -93,7 +93,7 @@ export class ChatService {
           customFields: contact.customFields,
           lastMessage: 'Sin mensajes previos',
           lastMessageDirection: null,
-          lastMessageAt: contact.createdAt,
+          lastMessageAt: null,
           unreadCount: 0
         });
       }
@@ -101,8 +101,8 @@ export class ChatService {
 
     // 4. Ordenamos: primero los chats con mensajes más recientes
     return chatList.sort((a, b) => {
-      const timeA = new Date(a.lastMessageAt || 0).getTime();
-      const timeB = new Date(b.lastMessageAt || 0).getTime();
+      const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+      const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
       return timeB - timeA;
     });
   }

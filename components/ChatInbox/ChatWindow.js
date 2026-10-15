@@ -238,8 +238,8 @@ export default function ChatWindow({
                 {msg.content}
               </div>
 
-              {/* Tarjeta de Excel si el mensaje hace referencia a inscripciones o planillas */}
-              {msg.content.toLowerCase().includes('inscripcion') || msg.content.toLowerCase().includes('lista') ? (
+              {/* Tarjeta de Documento Excel idéntica a la captura de WhatsApp Desktop */}
+              {(msg.metadata?.hasAttachment || msg.content.toLowerCase().includes('inscripcion') || msg.content.toLowerCase().includes('lista') || msg.content.toLowerCase().includes('amarillas')) ? (
                 <div style={{
                   marginTop: 6,
                   backgroundColor: 'var(--wa-bubble-doc)',
@@ -267,10 +267,10 @@ export default function ChatWindow({
                     </div>
                     <div>
                       <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#ffffff' }}>
-                        INSCRIPCION_CANDIDATAS_REINADO_RIO_2026.xlsx
+                        INSCRIPCION_CANDIDATAS_REINADO_RIO_2026_FILTRADO_24.xlsx
                       </div>
                       <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.7)' }}>
-                        XLSX &middot; 42 KB
+                        XLSX &middot; 10 KB
                       </div>
                     </div>
                   </div>
