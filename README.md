@@ -251,9 +251,12 @@ Abre tu navegador en:
 | `PATCH` | `/api/chats/[phone]` | Modifica y guarda la clasificación de un contacto (ej. a "Reinas"). |
 | `GET` | `/api/contacts` | Retorna los contactos registrados con filtros opcionales. |
 | `POST` | `/api/contacts` | Registra o actualiza un contacto individual. |
-| `POST` | `/api/contacts/upload` | Carga un archivo Excel (.xlsx/.xls) y procesa los contactos en la BD. |
+| `POST` | `/api/contacts/upload` | Carga un archivo Excel (.xlsx/.xls) permitiendo elegir o crear una categoría y aplicarla masivamente. |
 | `PATCH` | `/api/contacts/category` | Actualiza masivamente la clasificación de una lista de teléfonos. |
 | `GET` | `/api/categories` | Retorna las categorías activas (Reinas, VIP, Secretaría, etc.). |
+| `POST` | `/api/categories` | Crea una nueva categoría con nombre y color personalizado. |
+| `GET` | `/api/supabase/status` | Diagnóstico en tiempo real: verifica si Supabase está conectado y cuenta los registros en BD. |
+| `POST` | `/api/supabase/config` | Guarda credenciales de Supabase en .env.local para desarrollo local. |
 | `POST` | `/api/campaigns/send` | Ejecuta un envío masivo con plantilla dinámica y protección anti-baneo. |
 | `GET/POST`| `/api/webhook/whatsapp` | Webhook para recibir mensajes entrantes de Meta WhatsApp o Gateway. |
 
