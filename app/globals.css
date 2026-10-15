@@ -1,0 +1,231 @@
+/**
+ * ============================================================================
+ * ARCHIVO: app/globals.css
+ * DESCRIPCIÓN: Sistema de diseño exacto de WhatsApp Desktop Dark Mode.
+ * PRINCIPIOS:
+ *   - Estética idéntica a WhatsApp Desktop oficial (fondo #0b141a, paneles #111b21 y #202c33).
+ *   - Sin emojis: solo vectores SVG limpios y de alta fidelidad.
+ *   - Globos de chat con colas auténticas y tonos verde #005c4b / carbón #202c33.
+ *   - Fondo texturizado sutil tipo doodle de WhatsApp.
+ * ============================================================================
+ */
+
+:root {
+  /* Paleta oficial WhatsApp Desktop Dark */
+  --wa-bg-deep: #0c1317;
+  --wa-bg-panel: #111b21;
+  --wa-bg-sidebar: #111b21;
+  --wa-bg-rail: #202c33;
+  --wa-bg-chat: #0b141a;
+  --wa-bg-hover: #202c33;
+  --wa-bg-active: #2a3942;
+  --wa-bg-input: #202c33;
+  --wa-bg-input-focus: #2a3942;
+  
+  /* Burbujas de chat */
+  --wa-bubble-in: #202c33;
+  --wa-bubble-out: #005c4b;
+  --wa-bubble-doc: #025144;
+  --wa-bubble-doc-border: rgba(255, 255, 255, 0.08);
+
+  /* Acentos WhatsApp */
+  --wa-green: #00a884;
+  --wa-green-hover: #02906f;
+  --wa-green-btn: #00a884;
+  --wa-badge-green: #25d366;
+  --wa-check-blue: #53bdeb;
+
+  /* Textos y etiquetas */
+  --wa-text-primary: #e9edef;
+  --wa-text-secondary: #8696a0;
+  --wa-text-muted: #667781;
+  --wa-text-dim: #45525a;
+
+  /* Bordes y separadores */
+  --wa-border: #222d34;
+  --wa-border-subtle: rgba(134, 150, 160, 0.15);
+
+  /* Acentos de clasificación con vectores (sin emojis) */
+  --wa-reinas-color: #f472b6;
+  --wa-reinas-bg: rgba(244, 114, 182, 0.15);
+  --wa-reinas-border: rgba(244, 114, 182, 0.35);
+
+  --wa-vip-color: #fbbf24;
+  --wa-vip-bg: rgba(251, 191, 36, 0.15);
+  --wa-vip-border: rgba(251, 191, 36, 0.35);
+}
+
+/* Reset básico */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background-color: var(--wa-bg-deep);
+  color: var(--wa-text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  user-select: none;
+}
+
+/* Barras de scroll idénticas a WhatsApp Desktop */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(134, 150, 160, 0.2);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(134, 150, 160, 0.35);
+}
+
+/* Patrón de fondo del chat (WhatsApp Doodle en modo oscuro) */
+.wa-chat-pattern {
+  background-color: var(--wa-bg-chat);
+  background-image: 
+    radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    radial-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: 0 0, 16px 16px;
+}
+
+/* Globos de conversación fidedignos con picos de WhatsApp */
+.wa-bubble-incoming {
+  background-color: var(--wa-bubble-in);
+  color: var(--wa-text-primary);
+  border-radius: 0 8px 8px 8px;
+  position: relative;
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+  max-width: 68%;
+  align-self: flex-start;
+  word-break: break-word;
+}
+
+.wa-bubble-incoming::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -8px;
+  width: 0;
+  height: 0;
+  border-top: 8px solid var(--wa-bubble-in);
+  border-left: 8px solid transparent;
+}
+
+.wa-bubble-outgoing {
+  background-color: var(--wa-bubble-out);
+  color: var(--wa-text-primary);
+  border-radius: 8px 0 8px 8px;
+  position: relative;
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+  max-width: 68%;
+  align-self: flex-end;
+  word-break: break-word;
+}
+
+.wa-bubble-outgoing::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: -8px;
+  width: 0;
+  height: 0;
+  border-top: 8px solid var(--wa-bubble-out);
+  border-right: 8px solid transparent;
+}
+
+/* Pills de filtro de categorías (Todos, Reinas, No leídos, etc.) */
+.wa-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  background-color: var(--wa-bg-hover);
+  color: var(--wa-text-secondary);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.wa-filter-pill:hover {
+  background-color: var(--wa-bg-active);
+  color: var(--wa-text-primary);
+}
+
+.wa-filter-pill.active {
+  background-color: #00a884;
+  color: #111b21;
+  font-weight: 600;
+}
+
+.wa-filter-pill.active-reinas {
+  background-color: #ec4899;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* Badges sin emojis */
+.wa-badge-unread {
+  background-color: #25d366;
+  color: #111b21;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+}
+
+/* Inputs de WhatsApp */
+.wa-search-input {
+  background-color: var(--wa-bg-input);
+  color: var(--wa-text-primary);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px 8px 36px;
+  font-size: 0.88rem;
+  outline: none;
+  width: 100%;
+}
+.wa-search-input::placeholder {
+  color: var(--wa-text-muted);
+}
+.wa-search-input:focus {
+  background-color: var(--wa-bg-input-focus);
+}
+
+/* Botón flotante redondo WhatsApp (+ o Enviar) */
+.wa-btn-round-green {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #00a884;
+  color: #111b21;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+.wa-btn-round-green:hover {
+  background-color: #02906f;
+  transform: scale(1.04);
+}
