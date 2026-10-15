@@ -19,10 +19,18 @@ import {
   Sparkles,
   Database,
   Send,
-  Settings
+  Settings,
+  QrCode
 } from 'lucide-react';
 
-export default function WhatsAppRail({ activeTab, setActiveTab, unreadTotal = 0, reinasCount = 0 }) {
+export default function WhatsAppRail({
+  activeTab,
+  setActiveTab,
+  unreadTotal = 0,
+  reinasCount = 0,
+  onOpenBaileysModal,
+  isBaileysConnected = false
+}) {
   return (
     <nav
       aria-label="Barra de Navegación WhatsApp"
@@ -229,6 +237,40 @@ export default function WhatsAppRail({ activeTab, setActiveTab, unreadTotal = 0,
 
       {/* Grupo Inferior */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+        {/* Vincular WhatsApp por Código QR (Baileys) */}
+        <button
+          type="button"
+          onClick={onOpenBaileysModal}
+          title={isBaileysConnected ? 'WhatsApp Vinculado por Baileys' : 'Vincular WhatsApp mediante Código QR (Baileys)'}
+          style={{
+            position: 'relative',
+            width: 44,
+            height: 44,
+            borderRadius: '10px',
+            backgroundColor: isBaileysConnected ? 'rgba(0, 168, 132, 0.15)' : 'transparent',
+            color: isBaileysConnected ? '#00a884' : 'var(--wa-text-secondary)',
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <QrCode size={21} strokeWidth={isBaileysConnected ? 2.3 : 1.8} />
+          <span
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              backgroundColor: isBaileysConnected ? '#00a884' : '#6b7280'
+            }}
+          />
+        </button>
+
         <button
           type="button"
           title="Ajustes"

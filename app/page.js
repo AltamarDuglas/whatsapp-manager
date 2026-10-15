@@ -15,13 +15,16 @@ import ChatInbox from '@/components/ChatInbox/ChatInbox';
 import ContactManager from '@/components/ContactManager/ContactManager';
 import MassCampaign from '@/components/MassCampaign/MassCampaign';
 import SupabaseConfigModal from '@/components/SupabaseConfigModal/SupabaseConfigModal';
-import { Minus, Square, X, MessageSquare, Database, ShieldCheck } from 'lucide-react';
+import BaileysQrModal from '@/components/BaileysQrModal/BaileysQrModal';
+import { Minus, Square, X, MessageSquare, Database, ShieldCheck, QrCode } from 'lucide-react';
 
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState('chats'); // 'chats' | 'contacts' | 'campaigns'
   const [contacts, setContacts] = useState([]);
   const [stats, setStats] = useState({ total: 0, reinas: 0 });
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
+  const [isBaileysModalOpen, setIsBaileysModalOpen] = useState(false);
+  const [baileysStatus, setBaileysStatus] = useState({ isConnected: false });
   const [supabaseStatus, setSupabaseStatus] = useState({
     configured: false,
     connected: false,
@@ -55,10 +58,21 @@ export default function HomePage() {
     }
   }, []);
 
+  const fetchBaileysStatus = React.useCallback(async () => {
+    try {
+      const res = await fetch('/api/baileys/status');
+      const data = await res.json();
+      setBaileysStatus(data);
+    } catch (err) {
+      console.warn('[HomePage] Error al consultar estado de Baileys:', err);
+    }
+  }, []);
+
   useEffect(() => {
     loadContactsData();
     fetchSupabaseStatus();
-  }, [loadContactsData, fetchSupabaseStatus]);
+    fetchBaileysStatus();
+  }, [loadContactsData, fetchSupabaseStatus, fetchBaileysStatus]);
 
   // Memoizar el manejador de estadísticas para evitar ciclos de renderizado
   const handleStatsUpdate = React.useCallback(({ total, reinas }) => {
@@ -157,6 +171,37 @@ export default function HomePage() {
             </span>
           </button>
 
+          {/* Botón para Vincular WhatsApp por Baileys QR */}
+          <button
+            type="button"
+            onClick={() => setIsBaileysModalOpen(true)}
+            title="Conectar WhatsApp mediante Código QR (Baileys)"
+            style={{
+              background: baileysStatus.isConnected
+                ? 'rgba(0, 168, 132, 0.12)'
+                : 'rgba(255, 255, 255, 0.05)',
+              border: baileysStatus.isConnected
+                ? '1px solid rgba(0, 168, 132, 0.3)'
+                : '1px solid var(--wa-border)',
+              borderRadius: '6px',
+              padding: '3px 10px',
+              color: baileysStatus.isConnected ? '#00a884' : 'var(--wa-text-secondary)',
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6
+            }}
+          >
+            <QrCode size={12} color={baileysStatus.isConnected ? '#00a884' : '#8696a0'} />
+            <span>
+              {baileysStatus.isConnected
+                ? `WhatsApp Activo (+${baileysStatus.user?.phone || ''})`
+                : 'Conectar WhatsApp (QR)'}
+            </span>
+          </button>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: 18, color: 'var(--wa-text-muted)' }}>
             <Minus size={13} style={{ cursor: 'pointer' }} />
             <Square size={11} style={{ cursor: 'pointer' }} />
@@ -173,6 +218,8 @@ export default function HomePage() {
           setActiveTab={setActiveTab}
           unreadTotal={contacts.length}
           reinasCount={stats.reinas}
+          onOpenBaileysModal={() => setIsBaileysModalOpen(true)}
+          isBaileysConnected={baileysStatus.isConnected}
         />
 
         {/* Panel Central */}
@@ -205,6 +252,13 @@ export default function HomePage() {
           fetchSupabaseStatus();
           loadContactsData();
         }}
+      />
+
+      {/* Modal de Conexión a Baileys por Código QR */}
+      <BaileysQrModal
+        isOpen={isBaileysModalOpen}
+        onClose={() => setIsBaileysModalOpen(false)}
+        onConnectionChanged={(status) => setBaileysStatus(status)}
       />
     </div>
   );

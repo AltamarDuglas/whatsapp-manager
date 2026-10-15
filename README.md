@@ -257,8 +257,35 @@ Abre tu navegador en:
 | `POST` | `/api/categories` | Crea una nueva categoría con nombre y color personalizado. |
 | `GET` | `/api/supabase/status` | Diagnóstico en tiempo real: verifica si Supabase está conectado y cuenta los registros en BD. |
 | `POST` | `/api/supabase/config` | Guarda credenciales de Supabase en .env.local para desarrollo local. |
+| `GET` | `/api/baileys/status` | Consulta el estado de conexión de Baileys y obtiene el código QR en Base64. |
+| `POST` | `/api/baileys/connect` | Inicializa la sesión de Baileys y solicita/regenera el código QR de vinculación. |
+| `POST` | `/api/baileys/disconnect` | Desconecta la sesión activa de WhatsApp Web y limpia credenciales en disco. |
+| `POST` | `/api/baileys/send` | Despacha un mensaje de WhatsApp a través del número vinculado por Baileys. |
 | `POST` | `/api/campaigns/send` | Ejecuta un envío masivo con plantilla dinámica y protección anti-baneo. |
 | `GET/POST`| `/api/webhook/whatsapp` | Webhook para recibir mensajes entrantes de Meta WhatsApp o Gateway. |
+
+---
+
+## Conexión a WhatsApp mediante Código QR (Baileys)
+
+La plataforma incluye integración nativa con **@whiskeysockets/baileys** para vincular un número de WhatsApp real sin pagar costos por mensaje a Meta:
+
+### 1. Iniciar el Gateway de Baileys
+En una terminal ejecuta:
+```bash
+npm run gateway
+```
+*El servicio se iniciará en el puerto 3001 (`http://localhost:3001`), manteniendo el WebSocket activo y guardando las sesiones de forma segura en `data/baileys_auth/`.*
+
+### 2. Vincular el Celular desde la Interfaz Web
+1. En la aplicación web haz clic en el botón superior **"Conectar WhatsApp (QR)"** o en el icono de código QR del riel lateral izquierdo.
+2. Si el gateway está activo, el código QR se generará automáticamente en pantalla.
+3. Abre WhatsApp en tu celular:
+   - En Android: toca los tres puntos verticales `⋮` > **Dispositivos vinculados** > **Vincular un dispositivo**.
+   - En iPhone: ve a **Configuración** > **Dispositivos vinculados** > **Vincular un dispositivo**.
+4. Escanea el código QR en la pantalla de tu ordenador.
+5. La interfaz se actualizará al instante a **"¡WhatsApp Conectado y Activo!"**, mostrando el número de teléfono y nombre vinculado.
+6. Puedes enviar un mensaje de prueba desde el mismo modal para verificar el despacho.
 
 ---
 
