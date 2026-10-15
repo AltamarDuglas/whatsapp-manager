@@ -2,9 +2,10 @@
  * ============================================================================
  * ARCHIVO: scripts/baileys-gateway.cjs
  * DESCRIPCIÓN: Microservicio Gateway ultra-robusto y de alta velocidad para Baileys.
- *              - Generación de código QR instantánea sin bloqueo de red.
+ *              - Manejo automático de código 401 (Logged Out / Sesión expirada):
+ *                Limpia credenciales caducadas y genera un QR nuevo al instante.
  *              - Auto-recuperación automática ante timeouts (código 408) y desconexiones.
- *              - Prevención de terminación del proceso (inmune a caídas).
+ *              - Proceso 100% permanente: nunca se apaga por desconexión de WhatsApp.
  * PUERTO: 3001 (configurable mediante variable PORT).
  * PRINCIPIO SOLID: Single Responsibility Principle (SRP)
  * ============================================================================
@@ -24,7 +25,7 @@ const {
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
 const SESSIONS_DIR = path.resolve(__dirname, '../data/baileys_auth');
 
-// Versión estable de Baileys en caché para evitar demoras por peticiones HTTP externas
+// Versión de Baileys fija para arranque instantáneo sin latencia de red
 const DEFAULT_VERSION = [2, 3000, 1015901307];
 
 let sock = null;
@@ -52,23 +53,19 @@ function notifyQrListeners(qrDataUrl) {
 }
 
 /**
- * Limpia los archivos temporales de sesión cuando una vinculación expira (código 408)
- * para evitar que Baileys intente reanudar credenciales inválidas.
+ * Elimina todos los archivos de sesión cuando una sesión es invalidada por WhatsApp (401 o 408).
  */
-function cleanEphemeralAuth() {
-  if (isConnected) return; // Nunca borrar si está conectado
+function cleanAllAuthFiles() {
   try {
     if (fs.existsSync(SESSIONS_DIR)) {
       const files = fs.readdirSync(SESSIONS_DIR);
       for (const file of files) {
-        // Borramos claves temporales efímeras de pre-autenticación
-        if (file.startsWith('pre-key-') || file.startsWith('session-') || file === 'creds.json') {
-          try { fs.unlinkSync(path.join(SESSIONS_DIR, file)); } catch (_) {}
-        }
+        try { fs.unlinkSync(path.join(SESSIONS_DIR, file)); } catch (_) {}
       }
     }
+    console.log('[BaileysGateway] Carpeta de sesiones limpiada para nueva autenticación.');
   } catch (e) {
-    console.warn('[BaileysGateway] Advertencia limpiando auth efímero:', e.message);
+    console.warn('[BaileysGateway] Advertencia limpiando auth:', e.message);
   }
 }
 
@@ -81,7 +78,7 @@ function initBaileys(forceNew = false) {
     return Promise.resolve({ isConnected: true, hasQr: false, user: connectedUser });
   }
 
-  // Si ya tenemos un QR generado en los últimos 20 segundos y no es forzado, lo devolvemos
+  // Si ya tenemos un QR reciente (menos de 20 segundos) y no es forzado, lo devolvemos
   const qrAgeMs = Date.now() - currentQrTimestamp;
   if (!forceNew && currentQrDataUrl && qrAgeMs < 20000) {
     return Promise.resolve({ isConnected: false, hasQr: true, qrDataUrl: currentQrDataUrl });
@@ -125,7 +122,7 @@ function initBaileys(forceNew = false) {
       sock = makeWASocket({
         version: DEFAULT_VERSION,
         logger: pino({ level: 'silent' }),
-        printQRInTerminal: false, // El frontend se encarga del render visual limpio
+        printQRInTerminal: false,
         auth: state,
         browser: ['Secretaría WhatsApp', 'Desktop', '1.0.0'],
         syncFullHistory: false,
@@ -150,7 +147,7 @@ function initBaileys(forceNew = false) {
               color: { dark: '#111b21', light: '#ffffff' }
             });
             isInitializing = false;
-            console.log('[BaileysGateway] Código QR generado y listo para escanear.');
+            console.log('[BaileysGateway] ✓ Código QR generado y listo para escanear en pantalla.');
             notifyQrListeners(currentQrDataUrl);
           } catch (err) {
             console.error('[BaileysGateway] Error convirtiendo QR a DataURL:', err.message);
@@ -183,27 +180,30 @@ function initBaileys(forceNew = false) {
 
           const statusCode = lastDisconnect?.error?.output?.statusCode;
           const isTimedOut = statusCode === DisconnectReason.timedOut || statusCode === 408;
-          const isLoggedOut = statusCode === DisconnectReason.loggedOut;
-          const shouldReconnect = !isLoggedOut && !isManualDisconnect;
+          const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401;
 
-          console.log(`[BaileysGateway] Conexión cerrada (Código: ${statusCode || 'desconocido'}). Reconectar: ${shouldReconnect}`);
+          console.log(`[BaileysGateway] Conexión cerrada (Código: ${statusCode || 'desconocido'}).`);
 
-          if (isTimedOut) {
-            // El QR anterior expiró sin escanear: limpiamos auth efímero y regeneramos de inmediato
-            cleanEphemeralAuth();
-          }
+          // CASO CRÍTICO: 401 (Sesión inválida / caducada) o 408 (QR expiró)
+          if (isLoggedOut || isTimedOut) {
+            console.log(`[BaileysGateway] ⚠️ Sesión no válida en WhatsApp (${statusCode === 401 ? 'Código 401: Sesión caducada' : 'Código 408: QR expiró'}).`);
+            console.log(`[BaileysGateway] 🔄 Limpiando credenciales residuales y generando nuevo código QR limpio...`);
+            cleanAllAuthFiles();
 
-          if (shouldReconnect) {
             if (reconnectTimer) clearTimeout(reconnectTimer);
             reconnectTimer = setTimeout(() => {
-              console.log('[BaileysGateway] Reconectando y solicitando nuevo código QR...');
               initBaileys(true);
-            }, 1200);
-          } else {
-            currentQrCode = null;
-            currentQrDataUrl = null;
-            connectedUser = null;
-            sock = null;
+            }, 1000);
+            return;
+          }
+
+          // Otras desconexiones temporales de red: reconectar
+          if (!isManualDisconnect) {
+            if (reconnectTimer) clearTimeout(reconnectTimer);
+            reconnectTimer = setTimeout(() => {
+              console.log('[BaileysGateway] Reconectando sesión activa...');
+              initBaileys(false);
+            }, 2000);
           }
         }
       });
@@ -222,7 +222,7 @@ function initBaileys(forceNew = false) {
       });
 
     } catch (error) {
-      console.error('[BaileysGateway] Error durante arranque de Baileys:', error.message);
+      console.error('[BaileysGateway] Error durante inicialización:', error.message);
       isInitializing = false;
       notifyQrListeners(null);
     }
@@ -251,26 +251,15 @@ async function disconnectBaileys() {
     sock = null;
   }
 
-  // Eliminar archivos de sesión
-  try {
-    if (fs.existsSync(SESSIONS_DIR)) {
-      const files = fs.readdirSync(SESSIONS_DIR);
-      for (const file of files) {
-        fs.unlinkSync(path.join(SESSIONS_DIR, file));
-      }
-    }
-  } catch (err) {
-    console.warn('[BaileysGateway] Error limpiando credenciales:', err.message);
-  }
-
-  console.log('[BaileysGateway] Sesión desconectada y credenciales limpiadas.');
+  cleanAllAuthFiles();
+  console.log('[BaileysGateway] Sesión desconectada y credenciales reseteadas.');
 }
 
 /**
  * Servidor HTTP REST para comunicar con Next.js (Local o Vercel)
  */
 const server = http.createServer(async (req, res) => {
-  // Configuración de cabeceras CORS permisivas para permitir llamadas remotas
+  // CORS permisivo
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Cache-Control, x-baileys-gateway-url');
@@ -284,7 +273,7 @@ const server = http.createServer(async (req, res) => {
 
   const url = new URL(req.url, `http://${req.headers.host}`);
 
-  // Endpoint: GET /api/whatsapp/status
+  // GET /api/whatsapp/status
   if (req.method === 'GET' && url.pathname === '/api/whatsapp/status') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
@@ -308,7 +297,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Endpoint: POST /api/whatsapp/connect
+  // POST /api/whatsapp/connect
   if (req.method === 'POST' && url.pathname === '/api/whatsapp/connect') {
     const force = url.searchParams.get('force') === 'true';
     const result = await initBaileys(force);
@@ -326,7 +315,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Endpoint: POST /api/whatsapp/disconnect
+  // POST /api/whatsapp/disconnect
   if (req.method === 'POST' && url.pathname === '/api/whatsapp/disconnect') {
     await disconnectBaileys();
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -337,7 +326,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Endpoint: POST /api/whatsapp/send
+  // POST /api/whatsapp/send
   if (req.method === 'POST' && url.pathname === '/api/whatsapp/send') {
     if (!isConnected || !sock) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -390,12 +379,15 @@ const server = http.createServer(async (req, res) => {
 
 // Protección contra caídas inesperadas
 process.on('uncaughtException', (err) => {
-  console.error('[BaileysGateway] Excepción no capturada (mantenimiento activo):', err.message);
+  console.error('[BaileysGateway] Excepción capturada (servidor protegido):', err.message);
 });
 
 process.on('unhandledRejection', (reason) => {
-  console.error('[BaileysGateway] Rechazo no manejado (mantenimiento activo):', reason);
+  console.error('[BaileysGateway] Rechazo capturado (servidor protegido):', reason);
 });
+
+// Mantenemos el Event Loop siempre activo
+setInterval(() => {}, 1000 * 60 * 60);
 
 server.listen(PORT, () => {
   console.log(`========================================================`);
