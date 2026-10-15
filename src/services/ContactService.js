@@ -76,9 +76,10 @@ export class ContactService {
    * 
    * @param {ArrayBuffer|Buffer} buffer - Contenido binario del archivo.
    * @param {string} [defaultCategory='General'] - Categoría a asignar si el archivo no la incluye.
+   * @param {boolean} [overrideCategory=false] - Si es true, fuerza la categoría elegida a todas las filas del archivo.
    * @returns {{ contacts: Array<Contact>, invalidRows: Array<Object>, summary: Object }}
    */
-  parseExcel(buffer, defaultCategory = 'General') {
+  parseExcel(buffer, defaultCategory = 'General', overrideCategory = false) {
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const firstSheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[firstSheetName];
@@ -122,10 +123,12 @@ export class ContactService {
         ) {
           rawName = value;
         } else if (
-          lowerKey.includes('categoria') ||
-          lowerKey.includes('categoría') ||
-          lowerKey.includes('clasificacion') ||
-          lowerKey.includes('etiqueta')
+          !overrideCategory && (
+            lowerKey.includes('categoria') ||
+            lowerKey.includes('categoría') ||
+            lowerKey.includes('clasificacion') ||
+            lowerKey.includes('etiqueta')
+          )
         ) {
           if (value && String(value).trim()) {
             rawCategory = String(value).trim();
@@ -136,6 +139,10 @@ export class ContactService {
           // Todo lo demás se captura como variable personalizada (ej: {{radicado}}, {{cargo}}, etc.)
           customFields[key] = value;
         }
+      }
+
+      if (overrideCategory && defaultCategory) {
+        rawCategory = defaultCategory;
       }
 
       const normalizedPhone = PhoneFormatter.normalize(rawPhone);

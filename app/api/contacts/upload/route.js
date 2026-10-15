@@ -14,6 +14,7 @@ export async function POST(request) {
     const formData = await request.formData();
     const file = formData.get('file');
     const defaultCategory = formData.get('defaultCategory') || 'General';
+    const overrideCategory = formData.get('overrideCategory') === 'true' || formData.get('overrideCategory') === true;
 
     if (!file) {
       return NextResponse.json(
@@ -27,7 +28,7 @@ export async function POST(request) {
 
     const contactService = new ContactService();
     // Procesamos el Excel con normalización y deduplicación
-    const { contacts, invalidRows, summary } = contactService.parseExcel(buffer, defaultCategory);
+    const { contacts, invalidRows, summary } = contactService.parseExcel(buffer, defaultCategory, overrideCategory);
 
     // Guardamos los contactos válidos en la base de datos
     const saveResult = await contactService.saveBatch(contacts);

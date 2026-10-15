@@ -68,8 +68,12 @@ export default function ChatInbox({ onStatsUpdate }) {
           onStatsUpdateRef.current({ total: data.data.length, reinas });
         }
 
-        // Si no hay seleccionado un chat, seleccionamos el primero que tenga mensajes activos
-        if (data.data && data.data.length > 0) {
+        // Si no hay contactos en la base de datos, limpiamos la selección
+        if (!data.data || data.data.length === 0) {
+          setSelectedPhone(null);
+          setActiveChat(null);
+        } else {
+          // Si no hay seleccionado un chat, seleccionamos el primero que tenga mensajes activos
           setSelectedPhone((prevPhone) => {
             const currentChatStillExists = data.data.some((c) => c.phone === prevPhone);
             if (!prevPhone || !currentChatStillExists) {

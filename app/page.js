@@ -22,9 +22,14 @@ export default function HomePage() {
   const [contacts, setContacts] = useState([]);
   const [stats, setStats] = useState({ total: 0, reinas: 0 });
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
-  const [supabaseConfigured, setSupabaseConfigured] = useState(false);
+  const [supabaseStatus, setSupabaseStatus] = useState({
+    configured: false,
+    connected: false,
+    contactsCount: 0,
+    loading: true
+  });
 
-  const loadContactsData = async () => {
+  const loadContactsData = React.useCallback(async () => {
     try {
       const res = await fetch('/api/contacts');
       const data = await res.json();
@@ -38,16 +43,22 @@ export default function HomePage() {
     } catch (err) {
       console.warn('[HomePage] Error al cargar contactos:', err);
     }
-  };
+  }, []);
+
+  const fetchSupabaseStatus = React.useCallback(async () => {
+    try {
+      const res = await fetch('/api/supabase/status');
+      const data = await res.json();
+      setSupabaseStatus(data);
+    } catch (err) {
+      console.warn('[HomePage] Error al consultar estado de Supabase:', err);
+    }
+  }, []);
 
   useEffect(() => {
     loadContactsData();
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (url && url.startsWith('http') && key && key.length > 15) {
-      setSupabaseConfigured(true);
-    }
-  }, []);
+    fetchSupabaseStatus();
+  }, [loadContactsData, fetchSupabaseStatus]);
 
   // Memoizar el manejador de estadísticas para evitar ciclos de renderizado
   const handleStatsUpdate = React.useCallback(({ total, reinas }) => {
@@ -109,12 +120,25 @@ export default function HomePage() {
           <button
             type="button"
             onClick={() => setIsSupabaseModalOpen(true)}
+            title="Haz clic para ver el estado de Supabase o ingresar credenciales"
             style={{
-              background: supabaseConfigured ? 'rgba(0, 168, 132, 0.12)' : 'rgba(251, 191, 36, 0.12)',
-              border: supabaseConfigured ? '1px solid rgba(0, 168, 132, 0.3)' : '1px solid rgba(251, 191, 36, 0.3)',
+              background: supabaseStatus.connected
+                ? 'rgba(0, 168, 132, 0.12)'
+                : supabaseStatus.configured
+                ? 'rgba(239, 68, 68, 0.12)'
+                : 'rgba(251, 191, 36, 0.12)',
+              border: supabaseStatus.connected
+                ? '1px solid rgba(0, 168, 132, 0.3)'
+                : supabaseStatus.configured
+                ? '1px solid rgba(239, 68, 68, 0.3)'
+                : '1px solid rgba(251, 191, 36, 0.3)',
               borderRadius: '6px',
-              padding: '3px 9px',
-              color: supabaseConfigured ? '#00a884' : '#fbbf24',
+              padding: '3px 10px',
+              color: supabaseStatus.connected
+                ? '#00a884'
+                : supabaseStatus.configured
+                ? '#f87171'
+                : '#fbbf24',
               fontSize: '0.72rem',
               fontWeight: 600,
               cursor: 'pointer',
@@ -124,7 +148,13 @@ export default function HomePage() {
             }}
           >
             <Database size={12} />
-            <span>{supabaseConfigured ? 'Supabase Conectado' : 'Modo Demo (Conectar Supabase)'}</span>
+            <span>
+              {supabaseStatus.connected
+                ? `Supabase Conectado (${supabaseStatus.contactsCount} en BD)`
+                : supabaseStatus.configured
+                ? 'Error al Conectar Supabase'
+                : 'Modo Local (Conectar Supabase)'}
+            </span>
           </button>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 18, color: 'var(--wa-text-muted)' }}>
@@ -171,7 +201,10 @@ export default function HomePage() {
       <SupabaseConfigModal
         isOpen={isSupabaseModalOpen}
         onClose={() => setIsSupabaseModalOpen(false)}
-        isConfigured={supabaseConfigured}
+        onConfigSaved={() => {
+          fetchSupabaseStatus();
+          loadContactsData();
+        }}
       />
     </div>
   );

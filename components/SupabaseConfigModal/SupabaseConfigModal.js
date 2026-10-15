@@ -1,8 +1,9 @@
 /**
  * ============================================================================
  * ARCHIVO: components/SupabaseConfigModal/SupabaseConfigModal.js
- * DESCRIPCIÓN: Modal interactivo con guía de despliegue en Vercel, vinculación
- *              a Supabase y botón para copiar el script SQL de creación de tablas.
+ * DESCRIPCIÓN: Modal interactivo con diagnóstico en vivo de Supabase, formulario
+ *              para ingresar credenciales, botón para copiar el script SQL y
+ *              guía para despliegue en Vercel.
  * PRINCIPIO SOLID: Single Responsibility Principle (SRP)
  * REGLA ESTRICTA: Sin emojis. Solo vectores SVG limpios de Lucide.
  * ============================================================================
@@ -10,17 +11,106 @@
 
 'use client';
 
-import React, { useState } from 'react';
-import { X, Database, Check, Copy, ExternalLink, Cloud, Shield } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  X,
+  Database,
+  Check,
+  Copy,
+  ExternalLink,
+  ShieldCheck,
+  AlertCircle,
+  Loader2,
+  RefreshCw,
+  Server
+} from 'lucide-react';
 
-export default function SupabaseConfigModal({ isOpen, onClose, isConfigured }) {
+export default function SupabaseConfigModal({ isOpen, onClose, onConfigSaved }) {
   const [copied, setCopied] = useState(false);
+  const [liveStatus, setLiveStatus] = useState(null);
+  const [isChecking, setIsChecking] = useState(false);
+
+  // Formulario para guardar credenciales directamente
+  const [inputUrl, setInputUrl] = useState('');
+  const [inputKey, setInputKey] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveFeedback, setSaveFeedback] = useState(null);
+
+  // Consultar el estado real de Supabase desde la API
+  const checkStatus = async () => {
+    setIsChecking(true);
+    try {
+      const res = await fetch('/api/supabase/status');
+      const data = await res.json();
+      setLiveStatus(data);
+      if (data.url && !inputUrl) {
+        setInputUrl(data.url);
+      }
+    } catch (err) {
+      setLiveStatus({
+        configured: false,
+        connected: false,
+        error: 'Error de red al consultar el estado de Supabase.'
+      });
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      checkStatus();
+      setSaveFeedback(null);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
+  // Guardar credenciales en .env.local a través de la API
+  const handleSaveCredentials = async (e) => {
+    e.preventDefault();
+    if (!inputUrl.trim() || !inputKey.trim()) {
+      setSaveFeedback({ success: false, message: 'Ingresa tanto la URL como la Anon Key.' });
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveFeedback(null);
+
+    try {
+      const res = await fetch('/api/supabase/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          supabaseUrl: inputUrl.trim(),
+          supabaseAnonKey: inputKey.trim()
+        })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setSaveFeedback({
+          success: true,
+          message: 'Credenciales guardadas con éxito. Verificando conexión...'
+        });
+        await checkStatus();
+        if (onConfigSaved) onConfigSaved();
+      } else {
+        setSaveFeedback({ success: false, message: data.error || 'Error al guardar.' });
+      }
+    } catch (err) {
+      setSaveFeedback({ success: false, message: 'Error de red al guardar las credenciales.' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleCopySql = () => {
-    const sqlScript = `-- Esquema oficial para Supabase:
--- Pega esto en Supabase > SQL Editor > Run:
+    const sqlScript = `-- ============================================================================
+-- ESQUEMA OFICIAL PARA SUPABASE: SECRETARÍA & REINADO DEL RÍO 2026
+-- Pega esto en Supabase > SQL Editor > Run
+-- ============================================================================
+
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE IF NOT EXISTS categories (
@@ -64,8 +154,8 @@ CREATE POLICY "Permitir lectura y edicion de contactos" ON contacts FOR ALL USIN
 CREATE POLICY "Permitir lectura y envio de mensajes" ON messages FOR ALL USING (true);
 
 INSERT INTO categories (name, color, description) VALUES
-('Reinas', '#ec4899', 'Candidatas, soberanas y delegaciones de certámenes'),
-('VIP', '#f59e0b', 'Autoridades e invitados especiales'),
+('Reinas', '#ec4899', 'Candidatas, soberanas y delegaciones del Reinado del Río 2026'),
+('VIP', '#f59e0b', 'Autoridades, gabinete e invitados especiales'),
 ('Secretaría', '#3b82f6', 'Equipo administrativo institucional'),
 ('Líderes', '#10b981', 'Líderes comunitarios y voceros'),
 ('General', '#6b7280', 'Ciudadanía en general')
@@ -75,6 +165,9 @@ ON CONFLICT (name) DO NOTHING;`;
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
+
+  const isConnected = liveStatus?.connected === true;
+  const isConfigured = liveStatus?.configured === true;
 
   return (
     <div style={{
@@ -90,14 +183,15 @@ ON CONFLICT (name) DO NOTHING;`;
     }}>
       <div style={{
         width: '100%',
-        maxWidth: 640,
-        maxHeight: '90vh',
+        maxWidth: 680,
+        maxHeight: '92vh',
         overflowY: 'auto',
         backgroundColor: 'var(--wa-bg-panel)',
         border: '1px solid var(--wa-border)',
         borderRadius: '12px',
-        padding: 28,
-        position: 'relative'
+        padding: 26,
+        position: 'relative',
+        boxShadow: '0 20px 50px rgba(0,0,0,0.6)'
       }}>
         {/* Botón cerrar */}
         <button
@@ -110,73 +204,240 @@ ON CONFLICT (name) DO NOTHING;`;
             background: 'none',
             border: 'none',
             color: 'var(--wa-text-secondary)',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            padding: 4
           }}
         >
           <X size={20} />
         </button>
 
         {/* Encabezado */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
           <div style={{
             width: 44,
             height: 44,
             borderRadius: '10px',
-            backgroundColor: 'rgba(0, 168, 132, 0.15)',
+            backgroundColor: isConnected ? 'rgba(0, 168, 132, 0.15)' : 'rgba(251, 191, 36, 0.15)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
           }}>
-            <Database size={24} color="#00a884" />
+            <Database size={24} color={isConnected ? '#00a884' : '#fbbf24'} />
           </div>
           <div>
             <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#ffffff' }}>
-              Guía de Conexión: Supabase & Despliegue en Vercel
+              Estado y Conexión de Supabase
             </h2>
             <p style={{ fontSize: '0.8rem', color: 'var(--wa-text-secondary)' }}>
-              Configuración para persistencia en nube y despliegue serverless.
+              Solo se mostrarán y cargarán los datos reales alojados en tu base de datos de Supabase.
             </p>
           </div>
         </div>
 
-        {/* Estado actual */}
+        {/* Tarjeta de Diagnóstico en Tiempo Real */}
         <div style={{
-          padding: '12px 16px',
+          padding: '14px 18px',
           borderRadius: '8px',
-          backgroundColor: isConfigured ? 'rgba(0, 168, 132, 0.12)' : 'rgba(251, 191, 36, 0.12)',
-          border: isConfigured ? '1px solid rgba(0, 168, 132, 0.3)' : '1px solid rgba(251, 191, 36, 0.3)',
+          backgroundColor: isConnected
+            ? 'rgba(0, 168, 132, 0.1)'
+            : isConfigured
+            ? 'rgba(239, 68, 68, 0.1)'
+            : 'rgba(251, 191, 36, 0.1)',
+          border: isConnected
+            ? '1px solid rgba(0, 168, 132, 0.35)'
+            : isConfigured
+            ? '1px solid rgba(239, 68, 68, 0.35)'
+            : '1px solid rgba(251, 191, 36, 0.35)',
           marginBottom: 20,
           display: 'flex',
-          alignItems: 'center',
-          gap: 10
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 12
         }}>
-          <div style={{
-            width: 10,
-            height: 10,
-            borderRadius: '50%',
-            backgroundColor: isConfigured ? '#00a884' : '#fbbf24'
-          }} />
-          <div style={{ fontSize: '0.82rem' }}>
-            <strong style={{ color: isConfigured ? '#00a884' : '#fbbf24' }}>
-              {isConfigured ? 'Supabase Conectado y Operativo' : 'Modo Demo Activo (Almacenamiento Local)'}
-            </strong>
-            <p style={{ color: 'var(--wa-text-secondary)', marginTop: 2 }}>
-              {isConfigured
-                ? 'Los contactos, categorías y mensajes se sincronizan en tiempo real en la nube.'
-                : 'La plataforma está lista para usar de inmediato en modo local. Agrega las credenciales para sincronizar con Supabase.'}
-            </p>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            <div style={{
+              width: 12,
+              height: 12,
+              borderRadius: '50%',
+              backgroundColor: isConnected ? '#00a884' : isConfigured ? '#ef4444' : '#fbbf24',
+              marginTop: 4,
+              flexShrink: 0
+            }} />
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <strong style={{
+                  color: isConnected ? '#00a884' : isConfigured ? '#ef4444' : '#fbbf24',
+                  fontSize: '0.88rem'
+                }}>
+                  {isConnected
+                    ? 'Supabase Conectado con Éxito'
+                    : isConfigured
+                    ? 'Error al Conectar con la Base de Datos'
+                    : 'Supabase No Configurado (Sin Credenciales)'}
+                </strong>
+              </div>
+
+              {isConnected && (
+                <p style={{ color: 'var(--wa-text-primary)', fontSize: '0.8rem', marginTop: 4 }}>
+                  Total en la base de datos: <strong>{liveStatus.contactsCount} contactos autorizados</strong> y <strong>{liveStatus.categoriesCount} categorías</strong>.
+                  <br />
+                  <span style={{ color: 'var(--wa-text-muted)', fontSize: '0.74rem' }}>
+                    Proyecto: {liveStatus.url}
+                  </span>
+                </p>
+              )}
+
+              {!isConnected && isConfigured && (
+                <div style={{ marginTop: 4 }}>
+                  <p style={{ color: '#fca5a5', fontSize: '0.8rem' }}>
+                    Error reportado: {liveStatus.error}
+                  </p>
+                  {liveStatus.hint && (
+                    <p style={{ color: 'var(--wa-text-secondary)', fontSize: '0.76rem', marginTop: 3 }}>
+                      Pista: {liveStatus.hint}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {!isConfigured && (
+                <p style={{ color: 'var(--wa-text-secondary)', fontSize: '0.8rem', marginTop: 4 }}>
+                  No se han detectado las variables <code style={{ color: '#fbbf24' }}>NEXT_PUBLIC_SUPABASE_URL</code> y <code style={{ color: '#fbbf24' }}>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>.
+                </p>
+              )}
+            </div>
           </div>
+
+          <button
+            type="button"
+            onClick={checkStatus}
+            disabled={isChecking}
+            title="Revisar conexión ahora"
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--wa-text-secondary)',
+              cursor: isChecking ? 'wait' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              fontSize: '0.76rem',
+              padding: 4
+            }}
+          >
+            <RefreshCw size={14} className={isChecking ? 'animate-spin' : ''} />
+            <span>{isChecking ? 'Verificando...' : 'Reintentar'}</span>
+          </button>
         </div>
 
-        {/* Pasos */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, fontSize: '0.84rem' }}>
-          {/* Paso 1: Supabase */}
-          <div style={{ borderLeft: '3px solid #00a884', paddingLeft: 14 }}>
+        {/* Sección: Ingresar Credenciales Directamente */}
+        <div style={{
+          backgroundColor: 'rgba(255, 255, 255, 0.02)',
+          border: '1px solid var(--wa-border)',
+          borderRadius: '8px',
+          padding: 16,
+          marginBottom: 20
+        }}>
+          <h3 style={{ fontSize: '0.88rem', fontWeight: 700, color: '#ffffff', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Server size={16} color="#00a884" />
+            <span>Configurar Credenciales de Supabase</span>
+          </h3>
+          <p style={{ fontSize: '0.76rem', color: 'var(--wa-text-secondary)', marginBottom: 12 }}>
+            Pega aquí los valores de tu proyecto en Supabase (obtenidos en <em>Project Settings &gt; API</em>) para guardarlos en tu entorno:
+          </p>
+
+          <form onSubmit={handleSaveCredentials} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.74rem', color: 'var(--wa-text-secondary)', marginBottom: 4 }}>
+                Project URL (NEXT_PUBLIC_SUPABASE_URL):
+              </label>
+              <input
+                type="text"
+                placeholder="https://xyzcompany.supabase.co"
+                value={inputUrl}
+                onChange={(e) => setInputUrl(e.target.value)}
+                disabled={isSaving}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  backgroundColor: 'var(--wa-bg-input)',
+                  border: '1px solid var(--wa-border)',
+                  borderRadius: '6px',
+                  color: '#ffffff',
+                  fontSize: '0.8rem',
+                  fontFamily: 'monospace'
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.74rem', color: 'var(--wa-text-secondary)', marginBottom: 4 }}>
+                Project API Key / Anon Public (NEXT_PUBLIC_SUPABASE_ANON_KEY):
+              </label>
+              <input
+                type="password"
+                placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                value={inputKey}
+                onChange={(e) => setInputKey(e.target.value)}
+                disabled={isSaving}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  backgroundColor: 'var(--wa-bg-input)',
+                  border: '1px solid var(--wa-border)',
+                  borderRadius: '6px',
+                  color: '#ffffff',
+                  fontSize: '0.8rem',
+                  fontFamily: 'monospace'
+                }}
+              />
+            </div>
+
+            {saveFeedback && (
+              <div style={{
+                padding: '8px 12px',
+                borderRadius: '6px',
+                backgroundColor: saveFeedback.success ? 'rgba(0, 168, 132, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                color: saveFeedback.success ? '#00a884' : '#f87171',
+                fontSize: '0.76rem'
+              }}>
+                {saveFeedback.message}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+              <button
+                type="submit"
+                disabled={isSaving || !inputUrl.trim() || !inputKey.trim()}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  backgroundColor: '#00a884',
+                  border: 'none',
+                  color: '#111b21',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  cursor: isSaving ? 'wait' : 'pointer'
+                }}
+              >
+                {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} strokeWidth={2.5} />}
+                <span>Guardar y Probar Conexión</span>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Pasos de configuración */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontSize: '0.82rem' }}>
+          <div style={{ borderLeft: '3px solid #00a884', paddingLeft: 12 }}>
             <h4 style={{ fontWeight: 700, color: '#ffffff', marginBottom: 4 }}>
-              Paso 1: Crear Base de Datos en Supabase
+              Paso 1: Crear Tablas en Supabase
             </h4>
             <p style={{ color: 'var(--wa-text-secondary)', lineHeight: 1.45, marginBottom: 8 }}>
-              Crea tu proyecto en <strong>supabase.com</strong>, abre el <strong>SQL Editor</strong> y pega el script con el botón abajo:
+              Abre tu proyecto en <strong>supabase.com</strong>, ingresa a la pestaña <strong>SQL Editor</strong>, pega el script oficial y presiona <strong>Run</strong>:
             </p>
             <button
               type="button"
@@ -190,66 +451,46 @@ ON CONFLICT (name) DO NOTHING;`;
                 border: '1px solid var(--wa-border)',
                 borderRadius: '6px',
                 padding: '6px 12px',
-                fontSize: '0.78rem',
+                fontSize: '0.76rem',
                 cursor: 'pointer'
               }}
             >
-              {copied ? <Check size={14} color="#00a884" /> : <Copy size={14} />}
-              <span>{copied ? 'Script SQL Copiado al Portapapeles' : 'Copiar Script SQL para Supabase'}</span>
+              {copied ? <Check size={13} color="#00a884" /> : <Copy size={13} />}
+              <span>{copied ? '¡Script SQL Copiado al Portapapeles!' : 'Copiar Script SQL para Supabase'}</span>
             </button>
           </div>
 
-          {/* Paso 2: Variables de Entorno */}
-          <div style={{ borderLeft: '3px solid #8b5cf6', paddingLeft: 14 }}>
+          <div style={{ borderLeft: '3px solid #3b82f6', paddingLeft: 12 }}>
             <h4 style={{ fontWeight: 700, color: '#ffffff', marginBottom: 4 }}>
-              Paso 2: Configurar Variables de Entorno
-            </h4>
-            <p style={{ color: 'var(--wa-text-secondary)', lineHeight: 1.45, marginBottom: 8 }}>
-              En Supabase ve a <strong>Project Settings &gt; API</strong> y copia las claves a <code style={{ color: '#a78bfa' }}>.env.local</code> o a las variables de entorno de Vercel:
-            </p>
-            <div style={{
-              backgroundColor: '#0c1317',
-              padding: '10px 14px',
-              borderRadius: '6px',
-              fontFamily: 'monospace',
-              fontSize: '0.78rem',
-              color: '#d1d5db',
-              lineHeight: 1.5,
-              border: '1px solid var(--wa-border)'
-            }}>
-              NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co<br />
-              NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_clave_anon_publica
-            </div>
-          </div>
-
-          {/* Paso 3: Vercel */}
-          <div style={{ borderLeft: '3px solid #ec4899', paddingLeft: 14 }}>
-            <h4 style={{ fontWeight: 700, color: '#ffffff', marginBottom: 4 }}>
-              Paso 3: Despliegue en Vercel
+              Paso 2: Variables en Vercel (Producción)
             </h4>
             <p style={{ color: 'var(--wa-text-secondary)', lineHeight: 1.45 }}>
-              1. Sube la carpeta <code style={{ color: '#ec4899' }}>whatsapp-next</code> a tu repositorio en GitHub.<br />
-              2. En Vercel haz clic en <strong>Add New &gt; Project</strong> e importa el repositorio.<br />
-              3. Agrega las variables de Supabase y haz clic en <strong>Deploy</strong>.
+              En tu dashboard de Vercel (<em>Project &gt; Settings &gt; Environment Variables</em>), añade:
+              <br />
+              &bull; <code style={{ color: '#60a5fa' }}>NEXT_PUBLIC_SUPABASE_URL</code>
+              <br />
+              &bull; <code style={{ color: '#60a5fa' }}>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 24 }}>
+        {/* Botón de cierre */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
           <button
             type="button"
             onClick={onClose}
             style={{
-              backgroundColor: '#00a884',
-              border: 'none',
+              backgroundColor: 'var(--wa-bg-hover)',
+              border: '1px solid var(--wa-border)',
               borderRadius: '6px',
               padding: '8px 20px',
-              color: '#111b21',
-              fontWeight: 700,
+              color: 'var(--wa-text-primary)',
+              fontWeight: 600,
+              fontSize: '0.82rem',
               cursor: 'pointer'
             }}
           >
-            Entendido
+            Cerrar
           </button>
         </div>
       </div>

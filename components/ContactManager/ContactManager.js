@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { PhoneFormatter } from '@/src/services/PhoneFormatter';
 import CategoryBadge from '../ChatInbox/CategoryBadge';
+import ExcelUploadModal from './ExcelUploadModal';
 
 export default function ContactManager({ onRefreshNeeded }) {
   const [contacts, setContacts] = useState([]);
@@ -35,6 +36,7 @@ export default function ContactManager({ onRefreshNeeded }) {
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [selectedPhones, setSelectedPhones] = useState(new Set());
   const [bulkCategory, setBulkCategory] = useState('Reinas');
+  const [showUploadModal, setShowUploadModal] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadFeedback, setUploadFeedback] = useState(null);
 
@@ -242,29 +244,27 @@ export default function ContactManager({ onRefreshNeeded }) {
             <span>Descargar Muestra Reinado</span>
           </a>
 
-          <label style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '8px 14px',
-            borderRadius: '8px',
-            backgroundColor: 'var(--wa-bg-hover)',
-            color: 'var(--wa-text-primary)',
-            fontSize: '0.82rem',
-            fontWeight: 500,
-            cursor: isUploading ? 'wait' : 'pointer',
-            border: '1px solid var(--wa-border)'
-          }}>
+          <button
+            type="button"
+            onClick={() => setShowUploadModal(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 14px',
+              borderRadius: '8px',
+              backgroundColor: 'var(--wa-bg-hover)',
+              color: 'var(--wa-text-primary)',
+              fontSize: '0.82rem',
+              fontWeight: 500,
+              cursor: 'pointer',
+              border: '1px solid var(--wa-border)',
+              transition: 'background-color 0.15s ease'
+            }}
+          >
             <Upload size={15} color="#00a884" />
-            <span>{isUploading ? 'Procesando Excel...' : 'Importar Excel / CSV'}</span>
-            <input
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              onChange={handleFileUpload}
-              disabled={isUploading}
-              style={{ display: 'none' }}
-            />
-          </label>
+            <span>Importar Excel / CSV</span>
+          </button>
 
           <button
             type="button"
@@ -681,6 +681,17 @@ export default function ContactManager({ onRefreshNeeded }) {
           </div>
         </div>
       )}
+
+      {/* Modal para Importar Excel con Selección o Creación de Categoría */}
+      <ExcelUploadModal
+        isOpen={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        initialCategory={selectedCategory !== 'Todos' ? selectedCategory : 'Reinas'}
+        onUploadSuccess={async () => {
+          await fetchContacts();
+          if (onRefreshNeeded) onRefreshNeeded();
+        }}
+      />
     </div>
   );
 }
